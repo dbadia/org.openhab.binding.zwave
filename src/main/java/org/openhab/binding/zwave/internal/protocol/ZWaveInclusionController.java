@@ -21,7 +21,7 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Generic;
 import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Specific;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass.CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AddNodeMessageClass;
@@ -43,7 +43,7 @@ public class ZWaveInclusionController implements ZWaveEventListener {
     private Timer timer = new Timer();
     private TimerTask timerTask = null;
     private ZWaveInclusionState inclusionState = ZWaveInclusionState.Unknown;
-    private final String networkSecurityKey;
+    private final String networkS0SecurityKey;
 
     private int nodeId = 0;
     private Basic basicClass;
@@ -58,11 +58,11 @@ public class ZWaveInclusionController implements ZWaveEventListener {
      * Create the inclusion controller
      *
      * @param controller         the {@link ZWaveController} to include a device into
-     * @param networkSecurityKey the network security key
+     * @param networkS0SecurityKey the network security key
      */
-    public ZWaveInclusionController(ZWaveController controller, String networkSecurityKey) {
+    public ZWaveInclusionController(ZWaveController controller, String networkS0SecurityKey) {
         this.controller = controller;
-        this.networkSecurityKey = networkSecurityKey;
+        this.networkS0SecurityKey = networkS0SecurityKey;
     }
 
     /**
@@ -245,7 +245,7 @@ public class ZWaveInclusionController implements ZWaveEventListener {
 
                         // Add the network key to the security class
                         if (commandClass == CommandClass.COMMAND_CLASS_SECURITY) {
-                            ((ZWaveSecurityCommandClass) zwaveCommandClass).setNetworkKey(networkSecurityKey);
+                            ((ZWaveSecurity0CommandClass) zwaveCommandClass).setNetworkKey(networkS0SecurityKey);
                         }
                         zwaveCommandClass.setControlClass(control);
                         newNode.addCommandClass(zwaveCommandClass);

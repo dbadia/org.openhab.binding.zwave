@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.zwave.internal.protocol;
 
+import static org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurity2V1.*;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
@@ -34,7 +36,9 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClas
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiAssociationCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiCommandCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiInstanceCommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveVersionCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveWakeUpCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
@@ -136,6 +140,12 @@ public class ZWaveNode {
 
     @XStreamOmitField
     Long inclusionTimer = null;
+
+    /**
+     * ZWaveSecurity2CommandClass has state specific to this node, so we must keep a reference to the given instance and
+     * persist it
+     */
+    private volatile ZWaveSecurity2CommandClass security2CommandClass = null;
 
     /**
      * Constructor. Creates a new instance of the ZWaveNode class.
@@ -899,7 +909,7 @@ public class ZWaveNode {
         if (CommandClass.COMMAND_CLASS_SECURITY == commandClass) {
             logger.debug("NODE {}: SECURITY check internal", nodeId);
             // CommandClass.SECURITY is a special case because only some commands get encrypted
-            return ZWaveSecurityCommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
+            return ZWaveSecurity0CommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
         }
 
         // PING should not be encrypted
@@ -1204,6 +1214,7 @@ public class ZWaveNode {
         incrementReceiveCount();
 
         boolean securityDecapOk = false;
+        ZWaveSecurityCommand securityCommandClass = null;
 
         if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_TRANSPORT_SERVICE.getKey()) {
             logger.debug("NODE {}: Decapsulating COMMAND_CLASS_TRANSPORT_SERVICE", getNodeId());
@@ -1218,31 +1229,38 @@ public class ZWaveNode {
                 return null;
             }
 
-            ZWaveSecurityCommandClass securityCommandClass = (ZWaveSecurityCommandClass) endpoints.get(0)
+            ZWaveSecurity0CommandClass security0CommandClass = (ZWaveSecurity0CommandClass) endpoints.get(0)
                     .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
-            if (securityCommandClass == null) {
+            if (security0CommandClass == null) {
                 logger.debug("NODE {}: COMMAND_CLASS_SECURITY not found in endpoint 0", getNodeId());
 
-                securityCommandClass = (ZWaveSecurityCommandClass) ZWaveCommandClass
+                security0CommandClass = (ZWaveSecurity0CommandClass) ZWaveCommandClass
                         .getInstance(CommandClass.COMMAND_CLASS_SECURITY.getKey(), this, controller);
-                if (securityCommandClass != null) {
+                if (security0CommandClass != null) {
                     logger.debug("NODE {}: Adding COMMAND_CLASS_SECURITY", nodeId);
-                    securityCommandClass.setNetworkKey(controller.getSecurityKey());
-                    addCommandClass(securityCommandClass);
+                    security0CommandClass.setNetworkKey(controller.getS0SecurityKey());
+                    addCommandClass(security0CommandClass);
                 } else {
                     logger.debug("NODE {}: Unable to instantiate COMMAND_CLASS_SECURITY", nodeId);
                     return null;
                 }
             }
+            securityCommandClass = security0CommandClass;
 
-            byte[] cleartextData = securityCommandClass.getSecurityMessageDecapsulation(payload.getPayloadBuffer());
-            if (cleartextData == null) {
+        } else if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_SECURITY_2.getKey()
+                && (payload.getCommandClassCommand() == SECURITY_2_MESSAGE_ENCAPSULATION
+                        || payload.getCommandClassCommand() == SECURITY_2_COMMANDS_NONCE_GET)) {// TODO:Why NONCE_GET if
+                                                                                                // it's not decryptable
+            logger.debug("NODE {}: Decapsulating COMMAND_CLASS_SECURITY_2", getNodeId());
+            if (security2CommandClass == null) {
+                // Security2 has unique keys for all nodes, so there's nothing we can do but fail if the class is
+                // missing
+                logger.error("NODE {}: recevied encapsulated message but COMMAND_CLASS_SECURITY_2 is null",
+                        getNodeId());
                 return null;
             }
+            securityCommandClass = security2CommandClass;
 
-            payload = new ZWaveCommandClassPayload(cleartextData);
-
-            securityDecapOk = true;
         } else if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_CRC_16_ENCAP.getKey()
                 && payload.getCommandClassCommand() == 1) {
             logger.debug("NODE {}: Decapsulating COMMAND_CLASS_CRC_16_ENCAP", getNodeId());
@@ -1263,6 +1281,16 @@ public class ZWaveNode {
                 // CRC Failed
                 return null;
             }
+        }
+
+        if (securityCommandClass != null) {
+            // decapsulate the message
+            byte[] cleartextData = securityCommandClass.decapsulateSecurityMessage(payload.getPayloadBuffer());
+            if (cleartextData == null) {
+                return null;
+            }
+            payload = new ZWaveCommandClassPayload(cleartextData);
+            securityDecapOk = true;
         }
 
         int endpointNumber = 0;
@@ -1445,6 +1473,14 @@ public class ZWaveNode {
         logger.trace("NODE {}: listening == {}, frequentlyListening == {}, awake == {}", getNodeId(), listening,
                 frequentlyListening, awake);
         return (listening == true || frequentlyListening == true || awake == true);
+    }
+
+    public ZWaveSecurity2CommandClass getSecurity2CommandClass() {
+        return security2CommandClass;
+    }
+
+    public void setSecurity2CommandClass(ZWaveSecurity2CommandClass security2CommandClass) {
+        this.security2CommandClass = security2CommandClass;
     }
 
     /**

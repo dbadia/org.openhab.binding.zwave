@@ -24,7 +24,7 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveController;
 import org.openhab.binding.zwave.internal.protocol.ZWaveEndpoint;
 import org.openhab.binding.zwave.internal.protocol.ZWaveNode;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass.CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 
@@ -41,7 +41,7 @@ public class ZWaveSecurityCommandClassTest {
         ZWaveNode node = Mockito.mock(ZWaveNode.class);
         ZWaveController controller = Mockito.mock(ZWaveController.class);
         ZWaveEndpoint endpoint = Mockito.mock(ZWaveEndpoint.class);
-        ZWaveSecurityCommandClass security = new ZWaveSecurityCommandClass(node, controller, endpoint);
+        ZWaveSecurity0CommandClass security = new ZWaveSecurity0CommandClass(node, controller, endpoint);
         security.setNetworkKey(TEST_KEY);
         // byte[] actualBytes = security.generateMAC((byte) CommandClassSecurityV1.SECURITY_MESSAGE_ENCAPSULATION, data,
         // (byte) 1, (byte) 2, iv);
@@ -72,11 +72,11 @@ public class ZWaveSecurityCommandClassTest {
         ZWaveEndpoint endpoint = Mockito.mock(ZWaveEndpoint.class);
 
         // Create the receive node
-        ZWaveSecurityCommandClass securityRx = new ZWaveSecurityCommandClass(nodeRx, controllerRx, endpoint);
+        ZWaveSecurity0CommandClass securityRx = new ZWaveSecurity0CommandClass(nodeRx, controllerRx, endpoint);
         securityRx.setNetworkKey(TEST_KEY);
 
         // Create the transmit node
-        ZWaveSecurityCommandClass securityTx = new ZWaveSecurityCommandClass(nodeTx, controllerTx, endpoint);
+        ZWaveSecurity0CommandClass securityTx = new ZWaveSecurity0CommandClass(nodeTx, controllerTx, endpoint);
         securityTx.setNetworkKey(TEST_KEY);
 
         // Create the nonce request in the transmit node, and send it to the receive node
@@ -91,9 +91,9 @@ public class ZWaveSecurityCommandClassTest {
         assertTrue(securityTx.isNonceAvailable());
 
         // Now encapsulate our message
-        byte[] request = securityTx.getSecurityMessageEncapsulation(payload);
+        byte[] request = securityTx.securelyEncapsulateTransaction(payload);
 
-        byte[] response = securityRx.getSecurityMessageDecapsulation(request);
+        byte[] response = securityRx.decapsulateSecurityMessage(request);
 
         assertTrue(Arrays.equals(payload, response));
     }

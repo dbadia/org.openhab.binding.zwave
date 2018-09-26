@@ -39,14 +39,14 @@ import com.thoughtworks.xstream.annotations.XStreamAlias;
 import com.thoughtworks.xstream.annotations.XStreamOmitField;
 
 /**
- * ZWave security command class 1
+ * ZWave security 0 command class 1
  *
  * @author Chris Jackson
  */
 @XStreamAlias("COMMAND_CLASS_SECURITY")
-public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
+public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWaveSecurityCommand {
     @XStreamOmitField
-    private static final Logger logger = LoggerFactory.getLogger(ZWaveSecurityCommandClass.class);
+    private static final Logger logger = LoggerFactory.getLogger(ZWaveSecurity0CommandClass.class);
 
     private static final byte[] DERIVE_ENCRYPT_KEY = { (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA,
             (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA, (byte) 0xAA,
@@ -81,7 +81,7 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
     @XStreamOmitField
     private byte lastTheirNonceId = (byte) 0xFF;
 
-    private static final String AES = "AES";
+    public static final String AES = "AES";
 
     private static final List<Byte> securityRequired = Arrays.asList(new Byte[] {
             CommandClassSecurityV1.NETWORK_KEY_SET, CommandClassSecurityV1.NETWORK_KEY_VERIFY,
@@ -92,13 +92,13 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
      * Creates a new instance of the ZWaveSecurityCommandClass class.
      *
      * @param node
-     *            the node this command class belongs to
+     *                       the node this command class belongs to
      * @param controller
-     *            the controller to use
+     *                       the controller to use
      * @param endpoint
-     *            the endpoint this Command class belongs to
+     *                       the endpoint this Command class belongs to
      */
-    public ZWaveSecurityCommandClass(ZWaveNode node, ZWaveController controller, ZWaveEndpoint endpoint) {
+    public ZWaveSecurity0CommandClass(ZWaveNode node, ZWaveController controller, ZWaveEndpoint endpoint) {
         super(node, controller, endpoint);
     }
 
@@ -277,7 +277,8 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
                         .withPriority(TransactionPriority.NonceResponse).build());
     }
 
-    public byte[] getSecurityMessageDecapsulation(byte[] ciphertextBytes) { // Check if this is a decapsulation message
+    @Override
+    public byte[] decapsulateSecurityMessage(byte[] ciphertextBytes) { // Check if this is a decapsulation message
         if ((ciphertextBytes[1] & 0xff) != CommandClassSecurityV1.SECURITY_MESSAGE_ENCAPSULATION
                 && (ciphertextBytes[1] & 0xff) != CommandClassSecurityV1.SECURITY_MESSAGE_ENCAPSULATION_NONCE_GET) {
             return ciphertextBytes;
@@ -344,7 +345,8 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
         return null;
     }
 
-    public byte[] getSecurityMessageEncapsulation(byte[] payload) {
+    @Override
+    public byte[] securelyEncapsulateTransaction(byte[] payload) {
         // tmpNonce.setNonceBytes(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 });
         // theirNonce.setNonceBytes(new byte[] { 1, 1, 1, 1, 1, 1, 1, 1 });
 
@@ -388,7 +390,7 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
 
     /**
      * Sets the network key. The key is provided as a string of hexadecimal values. Values can be space or comma
-     * delimitered, or can have no separation between values. Values can be prefixed with 0x or not.
+     * delimited, or can have no separation between values. Values can be prefixed with 0x or not.
      *
      * @param value {@link String} containing the new network key
      */
@@ -408,8 +410,8 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
         }
     }
 
-    private byte[] parseNetworkKeyAsHexString(String hexString) {
-        hexString = hexString.replace("0x", "");
+    protected byte[] parseNetworkKeyAsHexString(String hexStringParam) {
+        String hexString = hexStringParam.replace("0x", "");
         hexString = hexString.replace(",", "");
         hexString = hexString.replace(" ", "");
 
@@ -560,4 +562,25 @@ public class ZWaveSecurityCommandClass extends ZWaveCommandClass {
         System.arraycopy(tempAuth, 0, mac, 0, 8);
         return mac;
     }
+
+    public static byte[] hexToBytes(String value) {
+        String hexString = value.replace("0x", "");
+        hexString = hexString.replace(",", "");
+        hexString = hexString.replace(" ", "");
+
+        if ((hexString.length() % 2) != 0) {
+            logger.error("Network key must contain an even number of characters");
+            return null;
+        }
+
+        byte keyBytes[] = new byte[hexString.length() / 2];
+        char enc[] = hexString.toCharArray();
+        for (int i = 0; i < enc.length; i += 2) {
+            StringBuilder curr = new StringBuilder(2);
+            curr.append(enc[i]).append(enc[i + 1]);
+            keyBytes[i / 2] = (byte) Integer.parseInt(curr.toString(), 16);
+        }
+        return keyBytes;
+    }
+
 }

@@ -90,9 +90,9 @@ public abstract class ZWaveCommandClass {
     /**
      * Protected constructor. Initiates a new instance of a Command Class.
      *
-     * @param node the node this instance commands.
+     * @param node       the node this instance commands.
      * @param controller the controller to send messages to.
-     * @param endpoint the endpoint this Command class belongs to.
+     * @param endpoint   the endpoint this Command class belongs to.
      */
     protected ZWaveCommandClass(ZWaveNode node, ZWaveController controller, ZWaveEndpoint endpoint) {
         initialise(node, controller, endpoint);
@@ -244,8 +244,8 @@ public abstract class ZWaveCommandClass {
      * Handles an incoming application command request.
      *
      * @param serialMessage the incoming message to process.
-     * @param offset the offset position from which to start message processing.
-     * @param endpoint the endpoint or instance number this message is meant for.
+     * @param offset        the offset position from which to start message processing.
+     * @param endpoint      the endpoint or instance number this message is meant for.
      */
     public void handleApplicationCommandRequest(ZWaveCommandClassPayload payload, int endpoint)
             throws ZWaveSerialMessageException {
@@ -288,8 +288,8 @@ public abstract class ZWaveCommandClass {
      * Gets an instance of the right command class.
      * Returns null if the command class is not found.
      *
-     * @param i the code to instantiate
-     * @param node the node this instance commands.
+     * @param i          the code to instantiate
+     * @param node       the node this instance commands.
      * @param controller the controller to send messages to.
      * @return the ZWaveCommandClass instance that was instantiated, null otherwise
      */
@@ -301,10 +301,10 @@ public abstract class ZWaveCommandClass {
      * Gets an instance of the right command class.
      * Returns null if the command class is not found.
      *
-     * @param classId the code to instantiate
-     * @param node the node this instance commands.
+     * @param classId    the code to instantiate
+     * @param node       the node this instance commands.
      * @param controller the controller to send messages to.
-     * @param endpoint the endpoint this Command class belongs to
+     * @param endpoint   the endpoint this Command class belongs to
      * @return the ZWaveCommandClass instance that was instantiated, null otherwise
      */
     public static ZWaveCommandClass getInstance(int classId, ZWaveNode node, ZWaveController controller,
@@ -342,7 +342,7 @@ public abstract class ZWaveCommandClass {
     /**
      * Extract a decimal value from a byte array.
      *
-     * @param payload.getPayloadByte(offset) the buffer to be parsed.
+     * @param        payload.getPayloadByte(offset) the buffer to be parsed.
      * @param offset the offset at which to start reading
      * @return the extracted decimal value
      */
@@ -580,16 +580,16 @@ public abstract class ZWaveCommandClass {
         COMMAND_CLASS_AV_CONTENT_DIRECTORY_MD(0x95, null),
         COMMAND_CLASS_AV_RENDERER_STATUS(0x96, null),
         COMMAND_CLASS_AV_CONTENT_SEARCH_MD(0x97, null),
-        COMMAND_CLASS_SECURITY(0x98, ZWaveSecurityCommandClass.class),
+        COMMAND_CLASS_SECURITY(0x98, ZWaveSecurity0CommandClass.class),
         COMMAND_CLASS_AV_TAGGING_MD(0x99, null),
         COMMAND_CLASS_IP_CONFIGURATION(0x9A, null),
         COMMAND_CLASS_ASSOCIATION_COMMAND_CONFIGURATION(0x9B, null),
         COMMAND_CLASS_SENSOR_ALARM(0x9C, ZWaveAlarmSensorCommandClass.class),
         COMMAND_CLASS_SILENCE_ALARM(0x9D, ZWaveAlarmSilenceCommandClass.class),
         COMMAND_CLASS_SENSOR_CONFIGURATION(0x9E, ZWaveSensorConfigurationCommandClass.class),
-        COMMAND_CLASS_SECURITY_2(0x9F, null),
         COMMAND_CLASS_MARK(0xEF, null),
-        COMMAND_CLASS_NON_INTEROPERABLE(0xF0, null);
+        COMMAND_CLASS_NON_INTEROPERABLE(0xF0, null),
+        COMMAND_CLASS_SECURITY_2(0x9F, ZWaveSecurity2CommandClass.class);
 
         // MANUFACTURER_PROPRIETARY class definitions are defined by the manufacturer and device id
 
@@ -612,7 +612,7 @@ public abstract class ZWaveCommandClass {
          * manufacturer and the device id to generate a unique key.
          *
          * @param manufacturer the manufacturer ID
-         * @param deviceId the device ID
+         * @param deviceId     the device ID
          * @return a unique command class key
          */
         private static int getKeyFromManufacturerAndDeviceId(int manufacturer, int deviceId) {
@@ -660,7 +660,7 @@ public abstract class ZWaveCommandClass {
          * Lookup function based on the manufacturer and device ID.
          *
          * @param manufacturer the manufacturer ID
-         * @param deviceId the device ID
+         * @param deviceId     the device ID
          * @return enumeration value of the command class or null if there is no command class.
          */
         public static CommandClass getCommandClass(int manufacturer, int deviceId) {
