@@ -59,13 +59,13 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveEventListener;
 import org.openhab.binding.zwave.internal.protocol.ZWaveIoHandler;
 import org.openhab.binding.zwave.internal.protocol.ZWaveNode;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.ZWaveSecurity2CryptoOperations;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KeyType;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkStateEvent;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoOperations;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.RemoveFailedNodeMessageClass.Report;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 import org.slf4j.Logger;
@@ -87,7 +87,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
 
     private Boolean isMaster;
     private Integer sucNode;
-    private Map<ZWaveSecurity2KeyType, String> networkKeyTable = new ConcurrentHashMap<>();
+    private Map<ZWaveS2KeyType, String> networkKeyTable = new ConcurrentHashMap<>();
     private Integer secureInclusionMode;
     private Integer healTime;
     private Integer wakeupDefaultPeriod;
@@ -148,8 +148,8 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
         }
 
         // Check that all security keys exist
-        List<ZWaveSecurity2KeyType> keysToGenerate = Arrays.asList(ZWaveSecurity2KeyType.values());
-        for (ZWaveSecurity2KeyType networkKeyType : ZWaveSecurity2KeyType.values()) {
+        List<ZWaveS2KeyType> keysToGenerate = Arrays.asList(ZWaveS2KeyType.values());
+        for (ZWaveS2KeyType networkKeyType : ZWaveS2KeyType.values()) {
             String networkKeyHex = checkIfNetworkKeyExists(networkKeyType.getControllerConstantName());
             if (networkKeyHex != null) {
                 // Sanity check the key data - this is fast
@@ -170,12 +170,12 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
 
         if (keysToGenerate.isEmpty()) {
             // They exist, set and continue
-            ZWaveSecurity2CryptoOperations.setKeyTable(networkKeyTable);
+            ZWaveCryptoOperations.setKeyTable(networkKeyTable);
         } else {
             // We have keys to generate
             // This can be slow as is very specific about how these keys are to be generated (rightfully so as these
             // keys will typically be used for many years) see CC:009F.01.00.11.015
-            ZWaveSecurity2CryptoOperations.getInstance();
+            ZWaveCryptoOperations.getInstance();
             Thread keyGenerationThread = new Thread() {
 
             };
@@ -244,7 +244,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
         // CC:009F.01.00.11.015 The PRNG MUST be used for:
         // Generating new network keys when provisioning a new network
         byte[] keyBytes = new byte[16];
-        ZWaveSecurity2CryptoOperations.getInstance().fillFromPrng(keyBytes);
+        ZWaveCryptoOperations.getInstance().fillFromPrng(keyBytes);
         logger.debug("{} key generation took {}ms", networkKeyConstant,
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime));
 

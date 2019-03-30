@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2;
+package org.openhab.binding.zwave.internal.protocol.security;
 
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -30,7 +30,7 @@ import com.sun.istack.internal.NotNull;
  * @author Dave Badia
  *
  */
-public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity2CryptoProvider {
+public abstract class ZWaveCryptoProviderJCEJava8 extends ZWaveCryptoProvider {
     protected static final String ALGORITHM_EC = "EC";
     /**
      * The name of the JCE provider to use. Will be passed to all JCE API calls to force this use of this provider.
@@ -38,15 +38,15 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      */
     protected final String jceProviderName;
 
-    protected ZWaveSecurity2CryptoProviderJCEJava8(@Nullable String jceProviderName)
-            throws ZWaveSecurity2CryptoException {
+    protected ZWaveCryptoProviderJCEJava8(@Nullable String jceProviderName)
+            throws ZWaveCryptoException {
         if (jceProviderName != null && Security.getProvider(jceProviderName) == null) {
-            throw new ZWaveSecurity2CryptoException("JCE provider '" + jceProviderName + "' is not available");
+            throw new ZWaveCryptoException("JCE provider '" + jceProviderName + "' is not available");
         }
         this.jceProviderName = jceProviderName;
     }
 
-    protected ZWaveSecurity2CryptoProviderJCEJava8(@NotNull Provider jceProvider) throws ZWaveSecurity2CryptoException {
+    protected ZWaveCryptoProviderJCEJava8(@NotNull Provider jceProvider) throws ZWaveCryptoException {
         // Add it in the last position as:
         // 1. adding it elsewhere can cause issues with other crypto calls (SSL, etc)
         // 2. we will reference the jceProviderName in our calls to the API to force it's usage
@@ -85,7 +85,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      */
     @Override
     protected KeyPair generateECDHKeyPairAccordingToZwaveSpec(SecureRandom entrophySource)
-            throws ZWaveSecurity2CryptoException {
+            throws ZWaveCryptoException {
         // TODO: spec says we need to generate pub from private using EC 25519, figure out if JCE does it this way?
         try {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(ALGORITHM_EC, jceProviderName);
@@ -93,7 +93,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
             keyPairGenerator.initialize(256);
             return keyPairGenerator.generateKeyPair();
         } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
-            throw new ZWaveSecurity2CryptoException("Error during buildEntrophySource", e);
+            throw new ZWaveCryptoException("Error during buildEntrophySource", e);
         }
     }
 
@@ -108,13 +108,13 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      * {@inheritDoc}
      */
     @Override
-    protected SecureRandom buildEntrophySourceAccordingToZwaveSpec() throws ZWaveSecurity2CryptoException {
+    protected SecureRandom buildEntrophySourceAccordingToZwaveSpec() throws ZWaveCryptoException {
         // SPEC_VIOLATION This is currently out of compliance with the zwave spec as it requires a hardware source of
         // entropy. See CC:009F.01.00.11.017
         try {
             return SecureRandom.getInstanceStrong();
         } catch (NoSuchAlgorithmException e) {
-            throw new ZWaveSecurity2CryptoException("Error during buildEntrophySource", e);
+            throw new ZWaveCryptoException("Error during buildEntrophySource", e);
         }
     }
 
@@ -124,7 +124,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      */
     @Override
     protected byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey ourPrivateKey, byte[] devicePublicKeyBytes,
-            int nodeIdForLogging) throws ZWaveSecurity2CryptoException {
+            int nodeIdForLogging) throws ZWaveCryptoException {
         try {
             // Build public key object from bytes
             KeyFactory keyFactory = KeyFactory.getInstance(ALGORITHM_EC, jceProviderName);
@@ -138,7 +138,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
             byte[] sharedSecret = keyAgreement.generateSecret();
             return sharedSecret;
         } catch (RuntimeException | GeneralSecurityException e) {
-            throw new ZWaveSecurity2CryptoException(
+            throw new ZWaveCryptoException(
                     "NODE {}: " + nodeIdForLogging + " SECURITY_2_ERR Error during ECDH key agreement", e);
         }
     }
@@ -149,7 +149,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      */
     @Override
     protected byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray)
-            throws ZWaveSecurity2CryptoException {
+            throws ZWaveCryptoException {
         try {
             Mac mac = Mac.getInstance("AESCMAC", jceProviderName);
             mac.init(secretKey);
@@ -158,7 +158,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
             }
             return mac.doFinal();
         } catch (GeneralSecurityException e) {
-            throw new ZWaveSecurity2CryptoException("Error during AESCMAC encryption", e);
+            throw new ZWaveCryptoException("Error during AESCMAC encryption", e);
         }
     }
 
@@ -168,7 +168,7 @@ public abstract class ZWaveSecurity2CryptoProviderJCEJava8 extends ZWaveSecurity
      */
     @Override
     protected SecureRandom buildSpanNextNonceGenerator(byte[] mei, byte[] personalizationString)
-            throws ZWaveSecurity2CryptoException {
+            throws ZWaveCryptoException {
         /*
          * CC:009F.01.00.11.00F The CTR_DRBG MUST be instantiated using the following profile:
          * a. Entropy Input = MEI (obtained with CKDF-MEI_Expand)

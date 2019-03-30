@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums;
+package org.openhab.binding.zwave.internal.protocol.security.enums;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -15,7 +15,7 @@ import org.openhab.binding.zwave.internal.protocol.SerialMessage;
  * from CC:009F.01.05.11.015
  *
  */
-public enum ZWaveSecurity2KeyType implements ZWaveSecurity2BitmaskEnumType {
+public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
     S2_ACCESS_CONTROL(2, "S2 Access Control Class", 1, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_2, true, true),
     S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_1, true,
             false),
@@ -23,7 +23,7 @@ public enum ZWaveSecurity2KeyType implements ZWaveSecurity2BitmaskEnumType {
             false),
     S0(7, "S0 Secure legacy devices", 4, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, false, false);
 
-    private static List<ZWaveSecurity2KeyType> keyTypesFromWeakestToStrongestCache = null;
+    private static List<ZWaveS2KeyType> keyTypesFromWeakestToStrongestCache = null;
     private String toStringString;
     private int bitPosition;
     /**
@@ -39,7 +39,7 @@ public enum ZWaveSecurity2KeyType implements ZWaveSecurity2BitmaskEnumType {
     private boolean requiresDskConfirmation;
     private boolean requiredToSupportCsaWhenRequestedByNode;
 
-    private ZWaveSecurity2KeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
+    private ZWaveS2KeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
             boolean requiresDskConfirmation, boolean requiredToSupportCsaIfRequestedByNode) {
         this.bitPosition = bitPosition;
         this.toStringString = description + " " + super.toString();
@@ -49,29 +49,29 @@ public enum ZWaveSecurity2KeyType implements ZWaveSecurity2BitmaskEnumType {
         this.requiredToSupportCsaWhenRequestedByNode = requiredToSupportCsaIfRequestedByNode;
     }
 
-    public static List<ZWaveSecurity2KeyType> getKeyTypesFromWeakestToStrongest(boolean excludeS0) {
+    public static List<ZWaveS2KeyType> getKeyTypesFromWeakestToStrongest(boolean excludeS0) {
         if (keyTypesFromWeakestToStrongestCache == null) {
-            keyTypesFromWeakestToStrongestCache = Arrays.asList(ZWaveSecurity2KeyType.values());
-            keyTypesFromWeakestToStrongestCache.sort(new Comparator<ZWaveSecurity2KeyType>() {
+            keyTypesFromWeakestToStrongestCache = Arrays.asList(ZWaveS2KeyType.values());
+            keyTypesFromWeakestToStrongestCache.sort(new Comparator<ZWaveS2KeyType>() {
 
                 @Override
-                public int compare(ZWaveSecurity2KeyType first, ZWaveSecurity2KeyType second) {
+                public int compare(ZWaveS2KeyType first, ZWaveS2KeyType second) {
                     return second.securityLevel - first.securityLevel;
                 }
             });
             keyTypesFromWeakestToStrongestCache = Collections.unmodifiableList(keyTypesFromWeakestToStrongestCache);
         }
-        List<ZWaveSecurity2KeyType> copy = new ArrayList<>(keyTypesFromWeakestToStrongestCache);
+        List<ZWaveS2KeyType> copy = new ArrayList<>(keyTypesFromWeakestToStrongestCache);
         if (excludeS0) {
-            copy.remove(ZWaveSecurity2KeyType.S0);
+            copy.remove(ZWaveS2KeyType.S0);
         }
         return copy;
     }
 
     // TODO: delete?
-    public static ZWaveSecurity2KeyType mapFromControllerString(String controllerConstantName) {
+    public static ZWaveS2KeyType mapFromControllerString(String controllerConstantName) {
         // This is only called a few times during init, don't bother caching
-        for (ZWaveSecurity2KeyType keyType : ZWaveSecurity2KeyType.values()) {
+        for (ZWaveS2KeyType keyType : ZWaveS2KeyType.values()) {
             if (keyType.controllerConstantName.equals(controllerConstantName)) {
                 return keyType;
             }

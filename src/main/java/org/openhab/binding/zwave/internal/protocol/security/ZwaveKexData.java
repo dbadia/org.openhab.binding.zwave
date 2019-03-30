@@ -1,11 +1,11 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2;
+package org.openhab.binding.zwave.internal.protocol.security;
 
 import java.util.Collections;
 import java.util.List;
 
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2ECDHProfile;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 
 /**
  * Holder for KEX_SET and KEX_REPORT data.
@@ -16,18 +16,18 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.e
  * @author Dave Badia
  *
  */
-public class ZwaveSecurity2KexData {
+public class ZwaveKexData {
     private boolean clientSideAuthentication;
 
-    private List<ZWaveSecurity2KexScheme> kexSchemesList;
-    private List<ZWaveSecurity2ECDHProfile> ecdhProfileList;
-    private List<ZWaveSecurity2KeyType> keyTypeList;
+    private List<ZWaveS2KexScheme> kexSchemesList;
+    private List<ZWaveS2ECDHProfile> ecdhProfileList;
+    private List<ZWaveS2KeyType> keyTypeList;
 
     /**
      * KEX_REPORT friendly constructor - accepts a list of schemes and a list of ecdhprofiles
      */
-    public ZwaveSecurity2KexData(boolean clientSideAuthentication, List<ZWaveSecurity2KexScheme> kexSchemesList,
-            List<ZWaveSecurity2ECDHProfile> ecdhProfileList, List<ZWaveSecurity2KeyType> keyTypeList) {
+    public ZwaveKexData(boolean clientSideAuthentication, List<ZWaveS2KexScheme> kexSchemesList,
+            List<ZWaveS2ECDHProfile> ecdhProfileList, List<ZWaveS2KeyType> keyTypeList) {
         super();
         this.clientSideAuthentication = clientSideAuthentication;
         this.keyTypeList = keyTypeList;
@@ -38,8 +38,8 @@ public class ZwaveSecurity2KexData {
     /**
      * KEX_SET friendly constructor - accepts a single scheme and a single ecdhprofile
      */
-    public ZwaveSecurity2KexData(boolean clientSideAuthentication, ZWaveSecurity2KexScheme kexScheme,
-            ZWaveSecurity2ECDHProfile ecdhProfile, List<ZWaveSecurity2KeyType> keyTypeList) {
+    public ZwaveKexData(boolean clientSideAuthentication, ZWaveS2KexScheme kexScheme,
+            ZWaveS2ECDHProfile ecdhProfile, List<ZWaveS2KeyType> keyTypeList) {
         this.clientSideAuthentication = clientSideAuthentication;
         this.keyTypeList = keyTypeList;
         this.kexSchemesList = Collections.singletonList(kexScheme);
@@ -50,15 +50,15 @@ public class ZwaveSecurity2KexData {
         return clientSideAuthentication;
     }
 
-    public List<ZWaveSecurity2KexScheme> getKexSchemesList() {
+    public List<ZWaveS2KexScheme> getKexSchemesList() {
         return kexSchemesList;
     }
 
-    public List<ZWaveSecurity2ECDHProfile> getEcdhProfileList() {
+    public List<ZWaveS2ECDHProfile> getEcdhProfileList() {
         return ecdhProfileList;
     }
 
-    public List<ZWaveSecurity2KeyType> getKeyTypeList() {
+    public List<ZWaveS2KeyType> getKeyTypeList() {
         return keyTypeList;
     }
 
@@ -99,7 +99,7 @@ public class ZwaveSecurity2KexData {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ZwaveSecurity2KexData other = (ZwaveSecurity2KexData) obj;
+        ZwaveKexData other = (ZwaveKexData) obj;
         if (ecdhProfileList == null) {
             if (other.ecdhProfileList != null) {
                 return false;

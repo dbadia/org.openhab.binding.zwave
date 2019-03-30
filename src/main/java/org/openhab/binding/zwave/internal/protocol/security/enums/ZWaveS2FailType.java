@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums;
+package org.openhab.binding.zwave.internal.protocol.security.enums;
 
 /**
  * 3.1.7.4 Security 2 KEX Fail Command - Table 16
@@ -6,7 +6,7 @@ package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.
  * @author Dave Badia
  *
  */
-public enum ZWaveSecurity2FailType {
+public enum ZWaveS2FailType {
     /**
      * Key failure indicating that no match exists between requested/granted keys in the network.
      */
@@ -51,7 +51,7 @@ public enum ZWaveSecurity2FailType {
 
     private final int theByte;
 
-    private ZWaveSecurity2FailType(int theByte) {
+    private ZWaveS2FailType(int theByte) {
         this.theByte = theByte;
     }
 

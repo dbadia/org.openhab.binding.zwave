@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2;
+package org.openhab.binding.zwave.internal.protocol.security;
 
 import static org.openhab.binding.zwave.internal.protocol.SerialMessage.bb2hex;
 
@@ -13,7 +13,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,27 +26,27 @@ import org.slf4j.LoggerFactory;
  * Given that, as of this writing, OpenHAB supports JRE 8, some cryptographic operations are not available by default.
  * Therefore, the advanced crypto operations require different cryptographic libraries to provides the necessary
  * functionality. That abstraction is also hidden from this class as it only interfaces with a
- * {@link ZWaveSecurity2CryptoProvider}
+ * {@link ZWaveCryptoProvider}
  *
  *
  * @author Dave Badia
  *
  */
-public class ZWaveSecurity2CryptoOperations {
-    private static final Logger logger = LoggerFactory.getLogger(ZWaveSecurity2CryptoOperations.class);
-    private static ZWaveSecurity2CryptoOperations INSTANCE = null;
+public class ZWaveCryptoOperations {
+    private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperations.class);
+    private static ZWaveCryptoOperations INSTANCE = null;
 
     /**
      * The keys used for secure message exchange after secure inclusion
      */
-    private static Map<ZWaveSecurity2KeyType, SecretKey> aesCcmKeyTable = null;
+    private static Map<ZWaveS2KeyType, SecretKey> aesCcmKeyTable = null;
 
-    private final ZWaveSecurity2CryptoProvider zWaveSecurity2CryptoProvider; // TODO: rename
+    private final ZWaveCryptoProvider zWaveSecurity2CryptoProvider; // TODO: rename
                                                                              // zWaveComplaintCryptoProvider
 
-    public static synchronized ZWaveSecurity2CryptoOperations getInstance() {
+    public static synchronized ZWaveCryptoOperations getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new ZWaveSecurity2CryptoOperations();
+            INSTANCE = new ZWaveCryptoOperations();
         }
         return INSTANCE;
     }
@@ -59,18 +59,18 @@ public class ZWaveSecurity2CryptoOperations {
      */
     private final SecureRandom prng;
 
-    private ZWaveSecurity2CryptoOperations() {
+    private ZWaveCryptoOperations() {
         try {
-            this.zWaveSecurity2CryptoProvider = ZWaveSecurity2CryptoProviderFactory.createSecurity2CryptoProvider();
+            this.zWaveSecurity2CryptoProvider = ZWaveCryptoProviderFactory.createSecurity2CryptoProvider();
             SecureRandom entrophySource = zWaveSecurity2CryptoProvider.buildEntrophySourceAccordingToZwaveSpec();
             this.prng = zWaveSecurity2CryptoProvider.buildPrngAccordingToZwaveSpec(entrophySource);
-        } catch (ZWaveSecurity2CryptoException e) {
+        } catch (ZWaveCryptoException e) {
             throw new IllegalStateException("Error initializing ZWaveSecurity2CryptoOperations", e);
         }
     }
 
     public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes,
-            int nodeIdForLogging) throws ZWaveSecurity2CryptoException {
+            int nodeIdForLogging) throws ZWaveCryptoException {
         return zWaveSecurity2CryptoProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
                 nodeIdForLogging);
     }
@@ -79,11 +79,11 @@ public class ZWaveSecurity2CryptoOperations {
      * CC:009F.01.00.11.09D The EDCH private key MUST be created from 32 random bytes, which are generated using the
      * PRNG function (3.6.4.6).
      */
-    public KeyPair generateECDHKeyPair() throws ZWaveSecurity2CryptoException {
+    public KeyPair generateECDHKeyPair() throws ZWaveCryptoException {
         return zWaveSecurity2CryptoProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
     }
 
-    public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveSecurity2CryptoException {
+    public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
         return zWaveSecurity2CryptoProvider.performAesCmac(secretKey, dataToMacArray);
     }
 
@@ -95,25 +95,25 @@ public class ZWaveSecurity2CryptoOperations {
         prng.nextBytes(bytes);
     }
 
-    public byte[] decryptWithAesCcm(byte[] cipherBytes, ZWaveSecurity2KeyType keyType, byte[] nonce,
-            byte[] additionalAuthenticationData) throws ZWaveSecurity2CryptoException {
+    public byte[] decryptWithAesCcm(byte[] cipherBytes, ZWaveS2KeyType keyType, byte[] nonce,
+            byte[] additionalAuthenticationData) throws ZWaveCryptoException {
         SecretKey key = aesCcmKeyTable.get(keyType);
         return cryptWithAesCcm(false, cipherBytes, key, keyType.toString(), nonce, additionalAuthenticationData);
     }
 
     public byte[] decryptWithAesCcm(byte[] cipherBytes, SecretKey key, byte[] nonce,
-            byte[] additionalAuthenticationData) throws ZWaveSecurity2CryptoException {
+            byte[] additionalAuthenticationData) throws ZWaveCryptoException {
         return cryptWithAesCcm(false, cipherBytes, key, "Temp AES CCM", nonce, additionalAuthenticationData);
     }
 
-    public byte[] encryptWithAesCcm(byte[] plaintextBytes, ZWaveSecurity2KeyType keyType, byte[] nonce,
-            byte[] additionalAuthenticationData) throws ZWaveSecurity2CryptoException {
+    public byte[] encryptWithAesCcm(byte[] plaintextBytes, ZWaveS2KeyType keyType, byte[] nonce,
+            byte[] additionalAuthenticationData) throws ZWaveCryptoException {
         SecretKey key = aesCcmKeyTable.get(keyType);
         return cryptWithAesCcm(true, plaintextBytes, key, keyType.toString(), nonce, additionalAuthenticationData);
     }
 
     public byte[] encryptWithAesCcm(byte[] plaintextBytes, SecretKey key, byte[] nonce,
-            byte[] additionalAuthenticationData) throws ZWaveSecurity2CryptoException {
+            byte[] additionalAuthenticationData) throws ZWaveCryptoException {
         return cryptWithAesCcm(true, plaintextBytes, key, "Temp AES CCM", nonce, additionalAuthenticationData);
     }
 
@@ -127,10 +127,10 @@ public class ZWaveSecurity2CryptoOperations {
      *
      * @param keyDescription A textual description of the key in use for debug logging
      * @return the ciphertext
-     * @throws ZWaveSecurity2CryptoException
+     * @throws ZWaveCryptoException
      */
     private byte[] cryptWithAesCcm(boolean encrypt, byte[] inputBytes, SecretKey key, String keyDescription,
-            byte[] nonce, byte[] additionalAuthenticationData) throws ZWaveSecurity2CryptoException {
+            byte[] nonce, byte[] additionalAuthenticationData) throws ZWaveCryptoException {
         byte[] keyBytes = key.getEncoded();
         if (encrypt) {
             // TODO: log remove keyBytes from the log statement
@@ -180,9 +180,9 @@ public class ZWaveSecurity2CryptoOperations {
      * quickly. Any call to ZWaveSecurity2CryptoOperations.getInstance() will trigger entropy gathering which is quite
      * time consuming
      */
-    public static void setKeyTable(Map<ZWaveSecurity2KeyType, String> networkKeyTable) {
+    public static void setKeyTable(Map<ZWaveS2KeyType, String> networkKeyTable) {
         aesCcmKeyTable = new ConcurrentHashMap<>();
-        for (Map.Entry<ZWaveSecurity2KeyType, String> entry : networkKeyTable.entrySet()) {
+        for (Map.Entry<ZWaveS2KeyType, String> entry : networkKeyTable.entrySet()) {
             byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(entry.getValue());
             aesCcmKeyTable.put(entry.getKey(), new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES));
         }

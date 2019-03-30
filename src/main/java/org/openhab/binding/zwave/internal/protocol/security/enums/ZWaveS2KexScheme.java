@@ -1,16 +1,16 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums;
+package org.openhab.binding.zwave.internal.protocol.security.enums;
 
 /**
  * from CC:009F.01.05.11.015
  *
  */
-public enum ZWaveSecurity2KexScheme implements ZWaveSecurity2BitmaskEnumType {
+public enum ZWaveS2KexScheme implements ZWaveS2BitmaskEnumType {
     _1("KEX Scheme 1", 1);
 
     private final String toStringString;
     private final int bitPosition;
 
-    private ZWaveSecurity2KexScheme(String description, int bitPosition) {
+    private ZWaveS2KexScheme(String description, int bitPosition) {
         this.toStringString = description + " " + super.toString();
         this.bitPosition = bitPosition;
     }

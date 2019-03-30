@@ -1,12 +1,12 @@
-package org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums;
+package org.openhab.binding.zwave.internal.protocol.security.enums;
 
-public enum ZWaveSecurity2DskDigitInputMethod {
+public enum ZWaveS2DskDigitInputMethod {
     MANUAL(5),
     QR_CODE(16);
 
     private final int numberOfDigitsReceived;
 
-    private ZWaveSecurity2DskDigitInputMethod(int numberOfDigitsReceived) {
+    private ZWaveS2DskDigitInputMethod(int numberOfDigitsReceived) {
         this.numberOfDigitsReceived = numberOfDigitsReceived;
     }
 

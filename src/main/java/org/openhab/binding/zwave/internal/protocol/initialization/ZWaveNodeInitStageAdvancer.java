@@ -12,7 +12,7 @@
  */
 package org.openhab.binding.zwave.internal.protocol.initialization;
 
-import static org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2FailType.*;
+import static org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType.*;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -58,17 +58,17 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2Co
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveVersionCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveWakeUpCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurity2V1;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.ZWaveSecurity2CryptoException;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.ZWaveSecurity2ProtocolViolationException;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.ZwaveSecurity2KexData;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2DskDigitInputMethod;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2ECDHProfile;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2FailType;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KeyType;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoException;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveProtocolViolationException;
+import org.openhab.binding.zwave.internal.protocol.security.ZwaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2DskDigitInputMethod;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.DeleteReturnRouteMessageClass;
@@ -619,7 +619,7 @@ public class ZWaveNodeInitStageAdvancer {
                     return;
                 }
 
-                ZwaveSecurity2KexData kexReportData = security2CommandClass.getKexReportDataReceivedFromNode();
+                ZwaveKexData kexReportData = security2CommandClass.getKexReportDataReceivedFromNode();
                 if (kexReportData == null) {
                     logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_NOT_RECEIVED",
                             node.getNodeId());
@@ -635,10 +635,10 @@ public class ZWaveNodeInitStageAdvancer {
                 // Kickoff temporary ECDH exchange key generation in the background for this node
                 security2CommandClass.generateS2TempExchangeKeyInBackground();
 
-                List<ZWaveSecurity2KeyType> requestedKeysList = kexReportData.getKeyTypeList();
+                List<ZWaveS2KeyType> requestedKeysList = kexReportData.getKeyTypeList();
                 // requestedKeysList has at least one key in it per ZWaveSecurity2CommandClass#validateKexReport
                 if (kexReportData.getKeyTypeList().size() == 1
-                        && ZWaveSecurity2KeyType.S0 == kexReportData.getKeyTypeList().get(0)) {
+                        && ZWaveS2KeyType.S0 == kexReportData.getKeyTypeList().get(0)) {
                     // S0 is disabled in code as it's untested. Log a message asking whoever has this device to contact
                     // us
                     logger.error(
@@ -690,7 +690,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // CC:009F.01.00.13.008 The KEX Set Command contains parameters selected by Node A. The list of class
                 // keys MAY be reduced to a subset of the list that was requested in the previous KEX Report from Node
                 // B. We send all requested keys
-                List<ZWaveSecurity2KeyType> grantedKeysList = security2CommandClass
+                List<ZWaveS2KeyType> grantedKeysList = security2CommandClass
                         .buildKeysToSendList(requestedKeysList);
 
                 long startTime = System.currentTimeMillis();
@@ -703,10 +703,10 @@ public class ZWaveNodeInitStageAdvancer {
                 // see CC:009F.01.00.11.05D
                 // TODO: update all timers to real values
                 boolean allowCsa = false; // we don't support CSA
-                ZWaveSecurity2KexScheme selectedKexScheme = ZWaveSecurity2KexScheme._1;
-                ZWaveSecurity2ECDHProfile selectedEcdhProfile = ZWaveSecurity2ECDHProfile.Curve25519;
+                ZWaveS2KexScheme selectedKexScheme = ZWaveS2KexScheme._1;
+                ZWaveS2ECDHProfile selectedEcdhProfile = ZWaveS2ECDHProfile.Curve25519;
 
-                ZwaveSecurity2KexData kexSetData = new ZwaveSecurity2KexData(allowCsa, selectedKexScheme,
+                ZwaveKexData kexSetData = new ZwaveKexData(allowCsa, selectedKexScheme,
                         selectedEcdhProfile, grantedKeysList);
                 if (processTransaction(security2CommandClass.buildKexSetMessageForInitialKeyExchange(kexSetData),
                         INCLUSION_TIMER_20_SEC, 3) == false) {
@@ -736,10 +736,10 @@ public class ZWaveNodeInitStageAdvancer {
 
                     // TODO: prompt the "operator" (user) to enter the 1st 5 digits from the device or scan QR code.
                     // Ours is 45683
-                    ZWaveSecurity2DskDigitInputMethod inputMethod = ZWaveSecurity2DskDigitInputMethod.MANUAL;
+                    ZWaveS2DskDigitInputMethod inputMethod = ZWaveS2DskDigitInputMethod.MANUAL;
                     byte[] dskBytesFromOperator = new byte[] { (byte) 4, (byte) 5, (byte) 6, (byte) 8, (byte) 3 };
 
-                    if (inputMethod == ZWaveSecurity2DskDigitInputMethod.MANUAL) {
+                    if (inputMethod == ZWaveS2DskDigitInputMethod.MANUAL) {
                         // CC:009F.01.00.11.0A7 If authentication is used, the DSK bytes 1..2 MUST be obfuscated by
                         // zeros.
 
@@ -768,7 +768,7 @@ public class ZWaveNodeInitStageAdvancer {
                         // B’s DSK.
                         // see CC:009F.01.00.11.05F
                         // TODO: NEED_UI
-                    } else if (inputMethod == ZWaveSecurity2DskDigitInputMethod.QR_CODE) {
+                    } else if (inputMethod == ZWaveS2DskDigitInputMethod.QR_CODE) {
                         // TODO: NEED_UI
                         // TODO: scan the QR code
 
@@ -942,7 +942,7 @@ public class ZWaveNodeInitStageAdvancer {
             } else {
                 logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: TOO_LONG?
             }
-        } catch (IOException | ZWaveSecurity2CryptoException e) {
+        } catch (IOException | ZWaveCryptoException e) {
             node.setSecurity2CommandClass(null);
             logger.error("NODE {}: SECURITY_2_INC State=EXCEPTION message={}", node.getNodeId(), e.getMessage(), e);
         }
@@ -952,10 +952,10 @@ public class ZWaveNodeInitStageAdvancer {
         if (initRunning == false) {
             return false;
         } else if (security2CommandClass.getContinueSecurePairing().get() == false) {
-            ZWaveSecurity2ProtocolViolationException protocolViolationException = security2CommandClass
+            ZWaveProtocolViolationException protocolViolationException = security2CommandClass
                     .getProtocolViolationException();
             if (protocolViolationException != null && protocolViolationException.getFailType().isPresent()) {
-                ZWaveSecurity2FailType failType = protocolViolationException.getFailType().get();
+                ZWaveS2FailType failType = protocolViolationException.getFailType().get();
                 controller.enqueue(security2CommandClass.buildFailMessage(failType));
             }
             return false;
@@ -963,12 +963,12 @@ public class ZWaveNodeInitStageAdvancer {
         return true;
     }
 
-    private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass, ZWaveSecurity2FailType failTypeParam) {
+    private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass, ZWaveS2FailType failTypeParam) {
         node.setSecurity2CommandClass(null);
         controller.notifyEventListeners(
                 new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
         // Should we send a FAIL command to the device?
-        ZWaveSecurity2FailType failTypeToSend = failTypeParam;
+        ZWaveS2FailType failTypeToSend = failTypeParam;
         if (failTypeToSend == null && security2CommandClass.getProtocolViolationException() != null
                 && security2CommandClass.getProtocolViolationException().getFailType().isPresent()) {
             failTypeToSend = security2CommandClass.getProtocolViolationException().getFailType().get();

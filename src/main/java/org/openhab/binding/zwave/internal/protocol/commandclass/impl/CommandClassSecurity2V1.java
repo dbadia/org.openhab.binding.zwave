@@ -7,7 +7,7 @@
  */
 package org.openhab.binding.zwave.internal.protocol.commandclass.impl;
 
-import static org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2EncapsulationExtensionType.parse;
+import static org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2EncapsulationExtensionType.parse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,13 +18,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.ZwaveSecurity2KexData;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2BitmaskEnumType;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2ECDHProfile;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2EncapsulationExtensionType;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2FailType;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.commandclass.impl.security2.enums.ZWaveSecurity2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.ZwaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2BitmaskEnumType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2EncapsulationExtensionType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,7 +59,7 @@ public class CommandClassSecurity2V1 {
     public final static int SECURITY_2_NETWORK_KEY_REPORT = 0x0A;
     public final static int SECURITY_2_NETWORK_KEY_VERIFY = 0x0B;
 
-    private final static Map<Class<? extends Enum>, Map<Integer, ZWaveSecurity2BitmaskEnumType>> ENUM_LOOKUP_TABLE_CACHE = new ConcurrentHashMap<>();
+    private final static Map<Class<? extends Enum>, Map<Integer, ZWaveS2BitmaskEnumType>> ENUM_LOOKUP_TABLE_CACHE = new ConcurrentHashMap<>();
 
     public static byte[] buildKexGet() {
         logger.debug("Creating command message SECURITY_2_COMMANDS_NONCE_GET version 1");
@@ -71,7 +71,7 @@ public class CommandClassSecurity2V1 {
         return outputData.toByteArray();
     }
 
-    public static byte[] buildKexSet(ZwaveSecurity2KexData kexSetData) {
+    public static byte[] buildKexSet(ZwaveKexData kexSetData) {
         logger.debug("Creating command message SECURITY_2_KEX_SET version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -88,7 +88,7 @@ public class CommandClassSecurity2V1 {
      * KEX_SET and KEX_REPORT contain identical fields
      */
     private static void writeKexData(ByteArrayOutputStream outputData, boolean echoFlag,
-            ZwaveSecurity2KexData kexData) {
+            ZwaveKexData kexData) {
         // bitmask (1 byte)
         BitSet bitmask = new BitSet(8); // All zeros - all off
 
@@ -112,7 +112,7 @@ public class CommandClassSecurity2V1 {
         writeBitmask(buildBitmask(kexData.getKeyTypeList()), outputData);
     }
 
-    public static byte[] buildNetworkKeyReport(ZWaveSecurity2KeyType keyType, byte[] keybytes) {
+    public static byte[] buildNetworkKeyReport(ZWaveS2KeyType keyType, byte[] keybytes) {
         logger.debug("Creating command message SECURITY_2_NETWORK_KEY_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -120,7 +120,7 @@ public class CommandClassSecurity2V1 {
         outputData.write(SECURITY_2_NETWORK_KEY_REPORT);
 
         // Granted Key (1 byte)
-        ZWaveSecurity2KeyType[] keysToSendArray = new ZWaveSecurity2KeyType[] { keyType };
+        ZWaveS2KeyType[] keysToSendArray = new ZWaveS2KeyType[] { keyType };
         writeBitmask(buildBitmask(keysToSendArray), outputData);
 
         // Network key (16 bytes)
@@ -136,8 +136,8 @@ public class CommandClassSecurity2V1 {
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Requested Key' (1 byte)
-        List<ZWaveSecurity2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveSecurity2KeyType.class,
-                ZWaveSecurity2KeyType.class);
+        List<ZWaveS2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveS2KeyType.class,
+                ZWaveS2KeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -166,18 +166,18 @@ public class CommandClassSecurity2V1 {
 
         // Parse Supported KEX Schemes
         // CC:009F.01.05.11.00B All other bits are reserved and MUST be set to zero by a sending node.
-        List<ZWaveSecurity2KexScheme> supportedKexSchemesList = parseBitMask(payload[3], ZWaveSecurity2KexScheme.class,
-                ZWaveSecurity2KexScheme.class);
+        List<ZWaveS2KexScheme> supportedKexSchemesList = parseBitMask(payload[3], ZWaveS2KexScheme.class,
+                ZWaveS2KexScheme.class);
         responseTable.put("SUPPORTED_KEX_SCHEMES", supportedKexSchemesList);
 
         // Parse 'Supported ECDH Profiles' (1 byte)
-        List<ZWaveSecurity2ECDHProfile> supportedECDHProfilesList = parseBitMask(payload[4],
-                ZWaveSecurity2ECDHProfile.class, ZWaveSecurity2ECDHProfile.class);
+        List<ZWaveS2ECDHProfile> supportedECDHProfilesList = parseBitMask(payload[4],
+                ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);
         responseTable.put("SUPPORTED_ECDH_PROFILES", supportedECDHProfilesList);
 
         // Parse 'Requested Keys' (1 byte)
-        List<ZWaveSecurity2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveSecurity2KeyType.class,
-                ZWaveSecurity2KeyType.class);
+        List<ZWaveS2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveS2KeyType.class,
+                ZWaveS2KeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -264,7 +264,7 @@ public class CommandClassSecurity2V1 {
      * Step 18. A->B : KEX Report (echo) : The KEX Report Command received from Node B in step 3 is confirmed via the
      * temporary secure channel.
      */
-    public static byte[] buildKexReport(ZwaveSecurity2KexData kexReportDataFromNode) {
+    public static byte[] buildKexReport(ZwaveKexData kexReportDataFromNode) {
         logger.debug("Creating command message KEX_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -282,7 +282,7 @@ public class CommandClassSecurity2V1 {
      *
      * @param CC:009F.01.07.11.002 KEX Fail Type (1 byte) This field MUST advertise one of the types defined in Table 16
      */
-    public static byte[] buildFail(ZWaveSecurity2FailType failType) {
+    public static byte[] buildFail(ZWaveS2FailType failType) {
         logger.debug("Creating command message SECURITY_2_COMMANDS_FAIL version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -323,7 +323,7 @@ public class CommandClassSecurity2V1 {
             boolean critical = bitSet.get(6);
             hasExtension = bitSet.get(7); // More to follow
             int typebyte = multiByte & 0x3F;
-            ZWaveSecurity2EncapsulationExtensionType type = parse(typebyte);
+            ZWaveS2EncapsulationExtensionType type = parse(typebyte);
             if (type.isEncrypted()) {
                 logger.warn(
                         "Encapsulation Extension Type {} should have been encrypted, but wasn't.  Encapsulation extension ignored.",
@@ -383,8 +383,8 @@ public class CommandClassSecurity2V1 {
     // TODO: move this to a test case, test each enu
     public static void main(String[] args) {
         try {
-            List<ZWaveSecurity2ECDHProfile> listEcdhProfileList = parseBitMask((byte) 255,
-                    ZWaveSecurity2ECDHProfile.class, ZWaveSecurity2ECDHProfile.class);
+            List<ZWaveS2ECDHProfile> listEcdhProfileList = parseBitMask((byte) 255,
+                    ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);
             System.out.println(listEcdhProfileList);
         } catch (Exception e) {
             e.printStackTrace();
@@ -409,16 +409,16 @@ public class CommandClassSecurity2V1 {
      * @param enumClassAsBitmask the same argument as enumClass, required for proper generics handling
      * @return list of the corresponding bitmask enums which were set on the given byte
      */
-    private static <E extends Enum<E>, B extends ZWaveSecurity2BitmaskEnumType> List<B> parseBitMask(byte toParse,
+    private static <E extends Enum<E>, B extends ZWaveS2BitmaskEnumType> List<B> parseBitMask(byte toParse,
             Class<E> enumClass, Class<B> enumClassAsBitmask) {
         BitSet bitSet = BitSet.valueOf(new byte[] { toParse });
-        Map<Integer, ZWaveSecurity2BitmaskEnumType> bitMaskLookupTable = ENUM_LOOKUP_TABLE_CACHE.get(enumClass);
+        Map<Integer, ZWaveS2BitmaskEnumType> bitMaskLookupTable = ENUM_LOOKUP_TABLE_CACHE.get(enumClass);
         if (bitMaskLookupTable == null) {
             // Not cached, build the table
             bitMaskLookupTable = new ConcurrentHashMap<>();
             for (Enum<E> enumVal : enumClass.getEnumConstants()) {
-                if (enumVal instanceof ZWaveSecurity2BitmaskEnumType) {
-                    ZWaveSecurity2BitmaskEnumType bitmaskEnumType = (ZWaveSecurity2BitmaskEnumType) enumVal;
+                if (enumVal instanceof ZWaveS2BitmaskEnumType) {
+                    ZWaveS2BitmaskEnumType bitmaskEnumType = (ZWaveS2BitmaskEnumType) enumVal;
                     bitMaskLookupTable.put(bitmaskEnumType.getBitPosition(), bitmaskEnumType);
                 } else {
                     throw new IllegalStateException(
@@ -443,7 +443,7 @@ public class CommandClassSecurity2V1 {
         return parsedList;
     }
 
-    private static <E extends Enum<E>, B extends ZWaveSecurity2BitmaskEnumType> BitSet buildBitmask(
+    private static <E extends Enum<E>, B extends ZWaveS2BitmaskEnumType> BitSet buildBitmask(
             B... bitmaskValuesToInclude) {
         BitSet bitmask = new BitSet();
         for (B aValue : bitmaskValuesToInclude) {
@@ -452,7 +452,7 @@ public class CommandClassSecurity2V1 {
         return bitmask;
     }
 
-    private static <E extends Enum<E>, B extends ZWaveSecurity2BitmaskEnumType> BitSet buildBitmask(
+    private static <E extends Enum<E>, B extends ZWaveS2BitmaskEnumType> BitSet buildBitmask(
             List<B> bitmaskValuesToInclude) {
         BitSet bitmask = new BitSet();
         for (B aValue : bitmaskValuesToInclude) {
