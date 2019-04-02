@@ -62,13 +62,13 @@ import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoException;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveProtocolViolationException;
-import org.openhab.binding.zwave.internal.protocol.security.ZwaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2DskDigitInputMethod;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.DeleteReturnRouteMessageClass;
@@ -138,7 +138,7 @@ public class ZWaveNodeInitStageAdvancer {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveNodeInitStageAdvancer.class);
 
     private static final ZWaveNodeSerializer nodeSerializer = new ZWaveNodeSerializer();
-    private static final long INCLUSION_TIMER_20_SEC = 20000000000L;
+    private static final long INCLUSION_TIMER_20_SEC_NANOS = 20000000000L;
 
     private final ZWaveNode node;
     private final ZWaveController controller;
@@ -193,7 +193,7 @@ public class ZWaveNodeInitStageAdvancer {
             @Override
             public void run() {
                 try {
-                    if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC) {
+                    if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
                         logger.debug("NODE {}: Node advancer: Node just included ({})", node.getNodeId(),
                                 node.getInclusionTimer());
                         doInitialInclusionStages();
@@ -471,7 +471,7 @@ public class ZWaveNodeInitStageAdvancer {
      */
     private void doSecureS0Stages(ZWaveSecurity0CommandClass securityCommandClass) {
         // Add the network key to the security class
-        securityCommandClass.setNetworkKey(controller.getS0SecurityKey());
+        securityCommandClass.setNetworkKeys(controller.getSecurityKeys());
 
         // Check if we want to perform a secure inclusion...
         boolean doSecureInclusion = false;
@@ -498,12 +498,12 @@ public class ZWaveNodeInitStageAdvancer {
         }
 
         // Check if this node was just included (within the last 10 seconds or so)
-        if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC) {
+        if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
             logger.debug("NODE {}: Performing secure inclusion.", node.getNodeId());
 
             // Get the scheme used for the remote
             logger.debug("NODE {}: SECURITY_INC State=GET_SCHEME", node.getNodeId());
-            if (processTransaction(securityCommandClass.getSecuritySchemeGetMessage(), INCLUSION_TIMER_20_SEC,
+            if (processTransaction(securityCommandClass.getSecuritySchemeGetMessage(), INCLUSION_TIMER_20_SEC_NANOS,
                     3) == false) {
 
                 controller.notifyEventListeners(
@@ -518,7 +518,7 @@ public class ZWaveNodeInitStageAdvancer {
 
             // Set the key
             logger.debug("NODE {}: SECURITY_INC State=SET_KEY", node.getNodeId());
-            if (processTransaction(securityCommandClass.getSetSecurityKeyMessage(), INCLUSION_TIMER_20_SEC,
+            if (processTransaction(securityCommandClass.getSetSecurityKeyMessage(), INCLUSION_TIMER_20_SEC_NANOS,
                     3) == true) {
                 // Notify that secure inclusion completed ok
                 controller.notifyEventListeners(
@@ -586,7 +586,7 @@ public class ZWaveNodeInitStageAdvancer {
          */
         try {
             // Check if this node was just included (within the last 10 seconds or so)
-            if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC) {
+            if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
                 logger.debug("NODE {}: Performing secure S2 inclusion.", node.getNodeId());
                 // Step 1. Network inclusion completed: Immediately following a successful network inclusion or after
                 // receiving an Inclusion Controller Initiate Command (refer to [16]), the Security 2 enabled controller
@@ -607,19 +607,20 @@ public class ZWaveNodeInitStageAdvancer {
                 // Step 2. A->B : KEX Get : Including Node A, requests KEX Report from Joining Node B
                 // see CC:009F.01.00.11.057
                 logger.debug("NODE {}: SECURITY_2_INC State=KEX_GET", node.getNodeId());
-                if (processTransaction(security2CommandClass.buildKexGetMessage(), INCLUSION_TIMER_20_SEC,
+                if (processTransaction(security2CommandClass.buildKexGetMessage(), INCLUSION_TIMER_20_SEC_NANOS,
                         3) == false) {
                     security2TimeoutOccurred("KEX_SET");
                     return;
                 }
-                // Step 3. B->A : KEX Report : Sent as response to the KEX Get command
-                // see CC:009F.01.00.11.05
                 if (shouldContinueS2Pairing(security2CommandClass) == false) {
                     haltS2Pairing(security2CommandClass);
                     return;
                 }
 
-                ZwaveKexData kexReportData = security2CommandClass.getKexReportDataReceivedFromNode();
+                // Step 3. B->A : KEX Report : Sent as response to the KEX Get command
+                // see CC:009F.01.00.11.05
+                ZWaveKexData kexReportData = security2CommandClass.waitForKexReportFromNode(TimeUnit.NANOSECONDS,
+                        INCLUSION_TIMER_20_SEC_NANOS);
                 if (kexReportData == null) {
                     logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_NOT_RECEIVED",
                             node.getNodeId());
@@ -635,10 +636,10 @@ public class ZWaveNodeInitStageAdvancer {
                 // Kickoff temporary ECDH exchange key generation in the background for this node
                 security2CommandClass.generateS2TempExchangeKeyInBackground();
 
-                List<ZWaveS2KeyType> requestedKeysList = kexReportData.getKeyTypeList();
+                List<ZWaveKeyType> requestedKeysList = kexReportData.getKeyTypeList();
                 // requestedKeysList has at least one key in it per ZWaveSecurity2CommandClass#validateKexReport
                 if (kexReportData.getKeyTypeList().size() == 1
-                        && ZWaveS2KeyType.S0 == kexReportData.getKeyTypeList().get(0)) {
+                        && ZWaveKeyType.S0 == kexReportData.getKeyTypeList().get(0)) {
                     // S0 is disabled in code as it's untested. Log a message asking whoever has this device to contact
                     // us
                     logger.error(
@@ -690,8 +691,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // CC:009F.01.00.13.008 The KEX Set Command contains parameters selected by Node A. The list of class
                 // keys MAY be reduced to a subset of the list that was requested in the previous KEX Report from Node
                 // B. We send all requested keys
-                List<ZWaveS2KeyType> grantedKeysList = security2CommandClass
-                        .buildKeysToSendList(requestedKeysList);
+                List<ZWaveKeyType> grantedKeysList = security2CommandClass.buildKeysToSendList(requestedKeysList);
 
                 long startTime = System.currentTimeMillis();
 
@@ -706,11 +706,11 @@ public class ZWaveNodeInitStageAdvancer {
                 ZWaveS2KexScheme selectedKexScheme = ZWaveS2KexScheme._1;
                 ZWaveS2ECDHProfile selectedEcdhProfile = ZWaveS2ECDHProfile.Curve25519;
 
-                ZwaveKexData kexSetData = new ZwaveKexData(allowCsa, selectedKexScheme,
-                        selectedEcdhProfile, grantedKeysList);
+                ZWaveKexData kexSetData = new ZWaveKexData(allowCsa, selectedKexScheme, selectedEcdhProfile,
+                        grantedKeysList);
                 if (processTransaction(security2CommandClass.buildKexSetMessageForInitialKeyExchange(kexSetData),
-                        INCLUSION_TIMER_20_SEC, 3) == false) {
-                    security2TimeoutOccurred("KEX_SET");
+                        INCLUSION_TIMER_20_SEC_NANOS, 3) == false) {
+                    security2TimeoutOccurred("PUBLIC_KEY_REPORT");
                     return;
                 }
 
@@ -855,7 +855,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // (Nonce Report is automatically exempt, so it is OK to enable even if we didn't receive NONCE_GET and
                 // respond with NONCE_REPORT yet)
 
-                node.setSecurity2CommandClass(security2CommandClass);
+                node.setSecurityCommandClass(security2CommandClass);
                 // Note that these is an inherit race condition where the node may have sent the encrypted KEX_REPORT
                 // before we enabled security, resulting in the message being dropped. The spec accounts for this by
                 // requiring the node to re-transmit the KEX_REPORT command see CC:009F.01.00.11.097
@@ -899,13 +899,14 @@ public class ZWaveNodeInitStageAdvancer {
 
                 // Step 18. A->B : KEX Report (echo)
                 // --> send in ZWaveSecurity2CommandClass#handleKexSet
+                ZWaveKexData kexReportDataEncapsulated = security2CommandClass
+                        .waitForKexReportFromNode(TimeUnit.NANOSECONDS, INCLUSION_TIMER_20_SEC_NANOS);
 
-                // Did we receive S2_MSG_ENCAP -> KEX_SET(Echo=1, granted keys) and reply with S2_MSG_ENCAP ->
-                // KEX_REPORT(Echo=1, requested keys) ?
-                // @formatter:on
+                // Did we receive Step 17 S2_MSG_ENCAP -> KEX_SET(Echo=1, granted keys) and reply with Step 18
+                // S2_MSG_ENCAP -> KEX_REPORT(Echo=1, requested keys) ?
                 if (security2CommandClass.waitForResponseToQueue(CommandClassSecurity2V1.KEX_REPORT) == false) {
                     security2TimeoutOccurred("E(KEX_SET)");
-                    node.setSecurity2CommandClass(null);
+                    node.setSecurityCommandClass(null);
                     return;
                 }
 
@@ -943,7 +944,7 @@ public class ZWaveNodeInitStageAdvancer {
                 logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: TOO_LONG?
             }
         } catch (IOException | ZWaveCryptoException e) {
-            node.setSecurity2CommandClass(null);
+            node.setSecurityCommandClass(null);
             logger.error("NODE {}: SECURITY_2_INC State=EXCEPTION message={}", node.getNodeId(), e.getMessage(), e);
         }
     }
@@ -964,7 +965,7 @@ public class ZWaveNodeInitStageAdvancer {
     }
 
     private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass, ZWaveS2FailType failTypeParam) {
-        node.setSecurity2CommandClass(null);
+        node.setSecurityCommandClass(null);
         controller.notifyEventListeners(
                 new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
         // Should we send a FAIL command to the device?

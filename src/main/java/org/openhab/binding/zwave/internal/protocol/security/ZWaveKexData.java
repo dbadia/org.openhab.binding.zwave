@@ -5,7 +5,7 @@ import java.util.List;
 
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 
 /**
  * Holder for KEX_SET and KEX_REPORT data.
@@ -16,18 +16,18 @@ import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType
  * @author Dave Badia
  *
  */
-public class ZwaveKexData {
+public class ZWaveKexData {
     private boolean clientSideAuthentication;
 
     private List<ZWaveS2KexScheme> kexSchemesList;
     private List<ZWaveS2ECDHProfile> ecdhProfileList;
-    private List<ZWaveS2KeyType> keyTypeList;
+    private List<ZWaveKeyType> keyTypeList;
 
     /**
      * KEX_REPORT friendly constructor - accepts a list of schemes and a list of ecdhprofiles
      */
-    public ZwaveKexData(boolean clientSideAuthentication, List<ZWaveS2KexScheme> kexSchemesList,
-            List<ZWaveS2ECDHProfile> ecdhProfileList, List<ZWaveS2KeyType> keyTypeList) {
+    public ZWaveKexData(boolean clientSideAuthentication, List<ZWaveS2KexScheme> kexSchemesList,
+            List<ZWaveS2ECDHProfile> ecdhProfileList, List<ZWaveKeyType> keyTypeList) {
         super();
         this.clientSideAuthentication = clientSideAuthentication;
         this.keyTypeList = keyTypeList;
@@ -38,8 +38,8 @@ public class ZwaveKexData {
     /**
      * KEX_SET friendly constructor - accepts a single scheme and a single ecdhprofile
      */
-    public ZwaveKexData(boolean clientSideAuthentication, ZWaveS2KexScheme kexScheme,
-            ZWaveS2ECDHProfile ecdhProfile, List<ZWaveS2KeyType> keyTypeList) {
+    public ZWaveKexData(boolean clientSideAuthentication, ZWaveS2KexScheme kexScheme, ZWaveS2ECDHProfile ecdhProfile,
+            List<ZWaveKeyType> keyTypeList) {
         this.clientSideAuthentication = clientSideAuthentication;
         this.keyTypeList = keyTypeList;
         this.kexSchemesList = Collections.singletonList(kexScheme);
@@ -58,7 +58,7 @@ public class ZwaveKexData {
         return ecdhProfileList;
     }
 
-    public List<ZWaveS2KeyType> getKeyTypeList() {
+    public List<ZWaveKeyType> getKeyTypeList() {
         return keyTypeList;
     }
 
@@ -88,18 +88,10 @@ public class ZwaveKexData {
         return result;
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null) {
+    public boolean equalsIgnoreEcho(ZWaveKexData other) {
+        if (other == null) {
             return false;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        ZwaveKexData other = (ZwaveKexData) obj;
         if (ecdhProfileList == null) {
             if (other.ecdhProfileList != null) {
                 return false;

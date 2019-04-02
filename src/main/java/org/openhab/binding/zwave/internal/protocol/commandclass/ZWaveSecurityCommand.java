@@ -1,5 +1,7 @@
 package org.openhab.binding.zwave.internal.protocol.commandclass;
 
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+
 /**
  * Interface to allow for generic handling of security encapsulation and decapsulation
  *
@@ -9,8 +11,10 @@ package org.openhab.binding.zwave.internal.protocol.commandclass;
  * @author Dave Badia
  *
  */
-public interface ZWaveSecurityCommand {
+public interface ZWaveSecurityCommand { // TODO: rename to ZWaveSecurityCommandClass
     public byte[] decapsulateSecurityMessage(byte[] ciphertextBytes);
 
     public byte[] securelyEncapsulateTransaction(byte[] payload);
+
+    public void setNetworkKeys(ZWaveSecurityNetworkKeys securityNetworkKeys);
 }

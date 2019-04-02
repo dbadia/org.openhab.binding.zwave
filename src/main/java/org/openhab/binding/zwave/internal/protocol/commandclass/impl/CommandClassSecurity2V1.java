@@ -18,13 +18,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
-import org.openhab.binding.zwave.internal.protocol.security.ZwaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2BitmaskEnumType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2EncapsulationExtensionType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,7 +71,7 @@ public class CommandClassSecurity2V1 {
         return outputData.toByteArray();
     }
 
-    public static byte[] buildKexSet(ZwaveKexData kexSetData) {
+    public static byte[] buildKexSet(ZWaveKexData kexSetData) {
         logger.debug("Creating command message SECURITY_2_KEX_SET version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -88,7 +88,7 @@ public class CommandClassSecurity2V1 {
      * KEX_SET and KEX_REPORT contain identical fields
      */
     private static void writeKexData(ByteArrayOutputStream outputData, boolean echoFlag,
-            ZwaveKexData kexData) {
+            ZWaveKexData kexData) {
         // bitmask (1 byte)
         BitSet bitmask = new BitSet(8); // All zeros - all off
 
@@ -112,7 +112,7 @@ public class CommandClassSecurity2V1 {
         writeBitmask(buildBitmask(kexData.getKeyTypeList()), outputData);
     }
 
-    public static byte[] buildNetworkKeyReport(ZWaveS2KeyType keyType, byte[] keybytes) {
+    public static byte[] buildNetworkKeyReport(ZWaveKeyType keyType, byte[] keybytes) {
         logger.debug("Creating command message SECURITY_2_NETWORK_KEY_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -120,7 +120,7 @@ public class CommandClassSecurity2V1 {
         outputData.write(SECURITY_2_NETWORK_KEY_REPORT);
 
         // Granted Key (1 byte)
-        ZWaveS2KeyType[] keysToSendArray = new ZWaveS2KeyType[] { keyType };
+        ZWaveKeyType[] keysToSendArray = new ZWaveKeyType[] { keyType };
         writeBitmask(buildBitmask(keysToSendArray), outputData);
 
         // Network key (16 bytes)
@@ -136,8 +136,8 @@ public class CommandClassSecurity2V1 {
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Requested Key' (1 byte)
-        List<ZWaveS2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveS2KeyType.class,
-                ZWaveS2KeyType.class);
+        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class,
+                ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -176,8 +176,8 @@ public class CommandClassSecurity2V1 {
         responseTable.put("SUPPORTED_ECDH_PROFILES", supportedECDHProfilesList);
 
         // Parse 'Requested Keys' (1 byte)
-        List<ZWaveS2KeyType> requestedKeysList = parseBitMask(payload[5], ZWaveS2KeyType.class,
-                ZWaveS2KeyType.class);
+        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class,
+                ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -264,7 +264,7 @@ public class CommandClassSecurity2V1 {
      * Step 18. A->B : KEX Report (echo) : The KEX Report Command received from Node B in step 3 is confirmed via the
      * temporary secure channel.
      */
-    public static byte[] buildKexReport(ZwaveKexData kexReportDataFromNode) {
+    public static byte[] buildKexReport(ZWaveKexData kexReportDataFromNode) {
         logger.debug("Creating command message KEX_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();

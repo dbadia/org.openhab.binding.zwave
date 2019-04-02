@@ -15,7 +15,8 @@ import org.openhab.binding.zwave.internal.protocol.SerialMessage;
  * from CC:009F.01.05.11.015
  *
  */
-public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
+public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
+    S2_TEMP(0, "S2 Temporary Pairing", 100, "invalid", false, false),
     S2_ACCESS_CONTROL(2, "S2 Access Control Class", 1, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_2, true, true),
     S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_1, true,
             false),
@@ -23,13 +24,13 @@ public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
             false),
     S0(7, "S0 Secure legacy devices", 4, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, false, false);
 
-    private static List<ZWaveS2KeyType> keyTypesFromWeakestToStrongestCache = null;
+    private static List<ZWaveKeyType> keyTypesFromWeakestToStrongestCache = null;
     private String toStringString;
     private int bitPosition;
     /**
      * CC:009F.01.05.11.015
      * Table 19, Requested Keys
-     * 1 - highest, 4 = lowest
+     * 1 - most secure, 4 = least secure
      */
     private int securityLevel;
     /**
@@ -39,7 +40,7 @@ public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
     private boolean requiresDskConfirmation;
     private boolean requiredToSupportCsaWhenRequestedByNode;
 
-    private ZWaveS2KeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
+    private ZWaveKeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
             boolean requiresDskConfirmation, boolean requiredToSupportCsaIfRequestedByNode) {
         this.bitPosition = bitPosition;
         this.toStringString = description + " " + super.toString();
@@ -49,34 +50,25 @@ public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
         this.requiredToSupportCsaWhenRequestedByNode = requiredToSupportCsaIfRequestedByNode;
     }
 
-    public static List<ZWaveS2KeyType> getKeyTypesFromWeakestToStrongest(boolean excludeS0) {
+    public static List<ZWaveKeyType> valuesWeakestToStrongest(boolean excludeS0) {
         if (keyTypesFromWeakestToStrongestCache == null) {
-            keyTypesFromWeakestToStrongestCache = Arrays.asList(ZWaveS2KeyType.values());
-            keyTypesFromWeakestToStrongestCache.sort(new Comparator<ZWaveS2KeyType>() {
+            keyTypesFromWeakestToStrongestCache = Arrays.asList(ZWaveKeyType.values());
+            keyTypesFromWeakestToStrongestCache.sort(new Comparator<ZWaveKeyType>() {
 
                 @Override
-                public int compare(ZWaveS2KeyType first, ZWaveS2KeyType second) {
+                public int compare(ZWaveKeyType first, ZWaveKeyType second) {
                     return second.securityLevel - first.securityLevel;
                 }
             });
             keyTypesFromWeakestToStrongestCache = Collections.unmodifiableList(keyTypesFromWeakestToStrongestCache);
         }
-        List<ZWaveS2KeyType> copy = new ArrayList<>(keyTypesFromWeakestToStrongestCache);
+        List<ZWaveKeyType> copy = new ArrayList<>(keyTypesFromWeakestToStrongestCache);
         if (excludeS0) {
-            copy.remove(ZWaveS2KeyType.S0);
+            copy.remove(ZWaveKeyType.S0);
         }
+        // Always exclude the temp key
+        copy.remove(ZWaveKeyType.S2_TEMP);
         return copy;
-    }
-
-    // TODO: delete?
-    public static ZWaveS2KeyType mapFromControllerString(String controllerConstantName) {
-        // This is only called a few times during init, don't bother caching
-        for (ZWaveS2KeyType keyType : ZWaveS2KeyType.values()) {
-            if (keyType.controllerConstantName.equals(controllerConstantName)) {
-                return keyType;
-            }
-        }
-        return null;
     }
 
     // TODO: delete
@@ -84,8 +76,8 @@ public enum ZWaveS2KeyType implements ZWaveS2BitmaskEnumType {
         try {
             byte[] bytes = ByteBuffer.allocate(2).putShort((short) 5).array();
             System.out.println(SerialMessage.bb2hex(bytes));
-            System.out.println(getKeyTypesFromWeakestToStrongest(false));
-            System.out.println(getKeyTypesFromWeakestToStrongest(true));
+            System.out.println(valuesWeakestToStrongest(false));
+            System.out.println(valuesWeakestToStrongest(true));
         } catch (Exception e) {
             e.printStackTrace();
         }

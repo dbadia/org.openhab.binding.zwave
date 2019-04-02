@@ -30,7 +30,7 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Basic;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionState;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiInstanceCommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
@@ -40,6 +40,7 @@ import org.openhab.binding.zwave.internal.protocol.event.ZWaveNodeStatusEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveTransactionCompletedEvent;
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeInitStage;
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeSerializer;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.ControllerSetDefaultMessageClass;
@@ -102,7 +103,6 @@ public class ZWaveController {
     private boolean softReset = false;
     private boolean masterController = true;
     private int secureInclusionMode = 0;
-    private String networkS0SecurityKey;
     private Set<SerialMessageClass> apiCapabilities = new HashSet<>();
 
     private ZWaveInclusionController inclusionController = null;
@@ -114,9 +114,11 @@ public class ZWaveController {
 
     private final ZWaveIoHandler ioHandler;
 
+    private final ZWaveSecurityNetworkKeys networkSecurityKeys;
+
     // Constructors
     public ZWaveController(ZWaveIoHandler handler) {
-        this(handler, new HashMap<String, String>());
+        this(handler, new HashMap<String, String>(), null); // TODO: is this really OK?
     }
 
     public void shutdown() {
@@ -131,15 +133,14 @@ public class ZWaveController {
      * @throws SerialInterfaceException
      *                                      when a connection error occurs.
      */
-    public ZWaveController(ZWaveIoHandler handler, Map<String, String> config) {
+    public ZWaveController(ZWaveIoHandler handler, Map<String, String> config, ZWaveSecurityNetworkKeys networkKeys) {
+        this.networkSecurityKeys = networkKeys;
         masterController = "true".equals(config.get("masterController"));
         sucNode = config.containsKey("sucNode") ? Integer.parseInt(config.get("sucNode")) : 0;
         softReset = "true".equals(config.get("softReset"));
         secureInclusionMode = config.containsKey("secureInclusion") ? Integer.parseInt(config.get("secureInclusion"))
                 : 0;
         final Integer timeout = config.containsKey("timeout") ? Integer.parseInt(config.get("timeout")) : 0;
-
-        networkS0SecurityKey = config.get("networkKey");
 
         defaultWakeupPeriod = config.containsKey("wakeupDefaultPeriod")
                 ? Integer.parseInt(config.get("wakeupDefaultPeriod"))
@@ -439,9 +440,9 @@ public class ZWaveController {
                             }
                         }
 
-                        // If this is the security command class, set the key
-                        if (commandClass instanceof ZWaveSecurity0CommandClass) {
-                            ((ZWaveSecurity0CommandClass) commandClass).setNetworkKey(networkS0SecurityKey);
+                        // If this is the security command class, set the keys
+                        if (commandClass instanceof ZWaveSecurityCommand) {
+                            ((ZWaveSecurityCommand) commandClass).setNetworkKeys(networkSecurityKeys);
                         }
                     }
                 }
@@ -695,7 +696,7 @@ public class ZWaveController {
                 break;
         }
 
-        inclusionController = new ZWaveInclusionController(this, networkS0SecurityKey);
+        inclusionController = new ZWaveInclusionController(this, networkSecurityKeys);
         inclusionController.startInclusion(highPower, networkWide);
     }
 
@@ -709,7 +710,7 @@ public class ZWaveController {
             return;
         }
 
-        inclusionController = new ZWaveInclusionController(this, networkS0SecurityKey);
+        inclusionController = new ZWaveInclusionController(this, networkSecurityKeys);
         inclusionController.startExclusion();
     }
 
@@ -1073,7 +1074,7 @@ public class ZWaveController {
         return defaultWakeupPeriod;
     }
 
-    public String getS0SecurityKey() {
-        return networkS0SecurityKey;
+    public ZWaveSecurityNetworkKeys getSecurityKeys() {
+        return networkSecurityKeys;
     }
 }

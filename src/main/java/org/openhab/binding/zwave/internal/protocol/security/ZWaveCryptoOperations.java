@@ -6,14 +6,11 @@ import java.security.KeyPair;
 import java.security.SecureRandom;
 import java.security.interfaces.ECPrivateKey;
 import java.util.BitSet;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,23 +30,15 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class ZWaveCryptoOperations {
+    public static final int NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS = 128;
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperations.class);
-    private static ZWaveCryptoOperations INSTANCE = null;
 
     /**
      * The keys used for secure message exchange after secure inclusion
      */
-    private static Map<ZWaveS2KeyType, SecretKey> aesCcmKeyTable = null;
+    private final ZWaveSecurityNetworkKeys networkSecurityKeys;
 
-    private final ZWaveCryptoProvider zWaveSecurity2CryptoProvider; // TODO: rename
-                                                                             // zWaveComplaintCryptoProvider
-
-    public static synchronized ZWaveCryptoOperations getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new ZWaveCryptoOperations();
-        }
-        return INSTANCE;
-    }
+    private final ZWaveCompliantCryptoProvider zWaveComplaintCryptoProvider;
 
     /**
      * CC:009F.01.00.11.015 The PRNG MUST be used for:
@@ -59,19 +48,16 @@ public class ZWaveCryptoOperations {
      */
     private final SecureRandom prng;
 
-    private ZWaveCryptoOperations() {
-        try {
-            this.zWaveSecurity2CryptoProvider = ZWaveCryptoProviderFactory.createSecurity2CryptoProvider();
-            SecureRandom entrophySource = zWaveSecurity2CryptoProvider.buildEntrophySourceAccordingToZwaveSpec();
-            this.prng = zWaveSecurity2CryptoProvider.buildPrngAccordingToZwaveSpec(entrophySource);
-        } catch (ZWaveCryptoException e) {
-            throw new IllegalStateException("Error initializing ZWaveSecurity2CryptoOperations", e);
-        }
+    protected ZWaveCryptoOperations(ZWaveCompliantCryptoProvider zWaveComplaintCryptoProvider,
+            ZWaveSecurityNetworkKeys networkSecurityKeysFromConfig, SecureRandom prng) {
+        this.zWaveComplaintCryptoProvider = zWaveComplaintCryptoProvider;
+        this.prng = prng;
+        this.networkSecurityKeys = networkSecurityKeysFromConfig;
     }
 
     public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes,
             int nodeIdForLogging) throws ZWaveCryptoException {
-        return zWaveSecurity2CryptoProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
+        return zWaveComplaintCryptoProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
                 nodeIdForLogging);
     }
 
@@ -80,11 +66,11 @@ public class ZWaveCryptoOperations {
      * PRNG function (3.6.4.6).
      */
     public KeyPair generateECDHKeyPair() throws ZWaveCryptoException {
-        return zWaveSecurity2CryptoProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
+        return zWaveComplaintCryptoProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
     }
 
     public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
-        return zWaveSecurity2CryptoProvider.performAesCmac(secretKey, dataToMacArray);
+        return zWaveComplaintCryptoProvider.performAesCmac(secretKey, dataToMacArray);
     }
 
     public SecretKey buildAESKey(byte[] keyBytes) {
@@ -95,9 +81,9 @@ public class ZWaveCryptoOperations {
         prng.nextBytes(bytes);
     }
 
-    public byte[] decryptWithAesCcm(byte[] cipherBytes, ZWaveS2KeyType keyType, byte[] nonce,
+    public byte[] decryptWithAesCcm(byte[] cipherBytes, ZWaveKeyType keyType, byte[] nonce,
             byte[] additionalAuthenticationData) throws ZWaveCryptoException {
-        SecretKey key = aesCcmKeyTable.get(keyType);
+        SecretKey key = networkSecurityKeys.getKey(keyType);
         return cryptWithAesCcm(false, cipherBytes, key, keyType.toString(), nonce, additionalAuthenticationData);
     }
 
@@ -106,9 +92,9 @@ public class ZWaveCryptoOperations {
         return cryptWithAesCcm(false, cipherBytes, key, "Temp AES CCM", nonce, additionalAuthenticationData);
     }
 
-    public byte[] encryptWithAesCcm(byte[] plaintextBytes, ZWaveS2KeyType keyType, byte[] nonce,
+    public byte[] encryptWithAesCcm(byte[] plaintextBytes, ZWaveKeyType keyType, byte[] nonce,
             byte[] additionalAuthenticationData) throws ZWaveCryptoException {
-        SecretKey key = aesCcmKeyTable.get(keyType);
+        SecretKey key = networkSecurityKeys.getKey(keyType);
         return cryptWithAesCcm(true, plaintextBytes, key, keyType.toString(), nonce, additionalAuthenticationData);
     }
 
@@ -118,7 +104,7 @@ public class ZWaveCryptoOperations {
     }
 
     public int computeAesCcmOutputSize(int plaintextLength, byte[] nonce, byte[] additionalAuthenticationData) {
-        return zWaveSecurity2CryptoProvider.computeAesCcmOutputSize(plaintextLength, nonce,
+        return zWaveComplaintCryptoProvider.computeAesCcmOutputSize(plaintextLength, nonce,
                 additionalAuthenticationData);
     }
 
@@ -141,7 +127,7 @@ public class ZWaveCryptoOperations {
             logger.debug("encryptWithAesCcm with {} ciphertextBytes={} key={} nonce={} aad={}", keyDescription,
                     bb2hex(inputBytes), bb2hex(keyBytes), bb2hex(nonce), bb2hex(additionalAuthenticationData));
         }
-        return zWaveSecurity2CryptoProvider.performAesCcmCrypt(encrypt, inputBytes, keyBytes, nonce,
+        return zWaveComplaintCryptoProvider.performAesCcmCrypt(encrypt, inputBytes, keyBytes, nonce,
                 additionalAuthenticationData);
     }
 
@@ -180,11 +166,12 @@ public class ZWaveCryptoOperations {
      * quickly. Any call to ZWaveSecurity2CryptoOperations.getInstance() will trigger entropy gathering which is quite
      * time consuming
      */
-    public static void setKeyTable(Map<ZWaveS2KeyType, String> networkKeyTable) {
-        aesCcmKeyTable = new ConcurrentHashMap<>();
-        for (Map.Entry<ZWaveS2KeyType, String> entry : networkKeyTable.entrySet()) {
-            byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(entry.getValue());
-            aesCcmKeyTable.put(entry.getKey(), new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES));
-        }
-    }
+    // public static void setKeyTable(Map<ZWaveS2KeyType, String> networkKeyTable) {
+    // aesCcmKeyTable = new ConcurrentHashMap<>();
+    // for (Map.Entry<ZWaveS2KeyType, String> entry : networkKeyTable.entrySet()) {
+    // byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(entry.getValue());
+    // aesCcmKeyTable.put(entry.getKey(), new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES));
+    // }
+    // }
+
 }

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -44,13 +45,15 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClas
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeInitStageAdvancer;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoException;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoOperations;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoOperationsFactory;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveProtocolViolationException;
-import org.openhab.binding.zwave.internal.protocol.security.ZwaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2EncapsulationExtensionType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KeyType;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayloadBuilder;
 import org.slf4j.Logger;
@@ -118,6 +121,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
 
     private static final ExecutorService BACKGROUND_EXECUTOR_SERVICE = Executors.newCachedThreadPool();
 
+    private static final List<Integer> SECURITY_REQUIRED_COMMANDS = Arrays
+            .asList(CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_VERIFY // TODO: what else?
+            );
+
     @XStreamOmitField
     private final byte[] homeId;
 
@@ -125,7 +132,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     private final int controllerNodeId;
 
     @XStreamOmitField
-    private ZwaveKexData kexSetDataSentToNode = null;
+    private final Object kexDataLock = new Object();
+
+    @XStreamOmitField
+    private ZWaveKexData kexSetDataSentToNode = null;
 
     @XStreamOmitField
     // We also use this object for wait/notify
@@ -146,18 +156,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     private byte[] tempPersonalizationString;
 
     @XStreamOmitField
-    ZwaveKexData kexReportDataFromNode;
+    private ZWaveKexData kexReportDataFromNode;
 
     @XStreamOmitField
     private byte[] deviceEcdhPublicKeyBytes;
 
-    /**
-     * Track which keys have been assigned to this node
-     */
-    private List<ZWaveS2KeyType> grantedKeysList;
-
     @XStreamOmitField
-    private List<ZWaveS2KeyType> keysThatNeedToBeSent;
+    private List<ZWaveKeyType> keysThatNeedToBeSent;
 
     /**
      * CC:009F.01.00.11.02D A receiving node MUST use the Sequence Number field in the Nonce Get, Nonce Report and
@@ -211,9 +216,6 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     @XStreamOmitField
     private int lastResponseQueuedCommandClass = -1;
 
-    private SecureRandom inboundSpan = null;
-    private SecureRandom outboundSpan = null;
-
     /**
      * Flag that is periodically checked by {@link ZWaveNodeInitStageAdvancer} to see if secure pairing should continue
      */
@@ -232,6 +234,16 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      */
     @XStreamOmitField
     private volatile ZWaveS2ECDHProfile ecdhProfileInUse = ZWaveS2ECDHProfile.Curve25519;
+
+    @XStreamOmitField
+    private ZWaveSecurityNetworkKeys securityNetworkKeys;
+
+    /**
+     * Track which keys have been granted to this node, sorted from strongest to weakest
+     */
+    private List<ZWaveKeyType> grantedKeysList;
+
+    private Map<ZWaveKeyType, SecureRandom> spanTable = new ConcurrentHashMap<>();
 
     static {
         byte aByte = 0x33 & 0xFF;
@@ -271,7 +283,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
 
     public static void initializeCrypto() {
         if (cryptoOperations == null) {
-            cryptoOperations = ZWaveCryptoOperations.getInstance();
+            cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
         }
     }
 
@@ -297,6 +309,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     /**
      * Step 3. B->A : KEX Report : Sent as response to the KEX Get command
      * see CC:009F.01.00.11.05
+     *
      */
     @SuppressWarnings("unchecked")
     @ZWaveResponseHandler(id = CommandClassSecurity2V1.KEX_REPORT, name = "KEX_REPORT")
@@ -309,14 +322,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         Boolean clientSideAuthenticationBit = (Boolean) response.get("CLIENT_SIDE_AUTHENTICATION");
         Boolean echoBit = (Boolean) response.get("ECHO");
 
-        List<ZWaveS2KexScheme> supportedKexSchemesList = (List<ZWaveS2KexScheme>) response
-                .get("SUPPORTED_KEX_SCHEMES");
+        List<ZWaveS2KexScheme> supportedKexSchemesList = (List<ZWaveS2KexScheme>) response.get("SUPPORTED_KEX_SCHEMES");
         List<ZWaveS2ECDHProfile> supportedEcdhProfilesList = (List<ZWaveS2ECDHProfile>) response
                 .get("SUPPORTED_ECDH_PROFILES");
-        List<ZWaveS2KeyType> requestedKeyTypeList = (List<ZWaveS2KeyType>) response.get("REQUESTED_KEYS");
+        List<ZWaveKeyType> requestedKeyTypeList = (List<ZWaveKeyType>) response.get("REQUESTED_KEYS");
 
         logger.debug("NODE {}: requestedKeyTypeList {}", getNode().getNodeId(), requestedKeyTypeList);
-        ZwaveKexData currentKexReportData = null;
+        ZWaveKexData currentKexReportData = null;
         try {
             currentKexReportData = validateKexReport(clientSideAuthenticationBit, echoBit, supportedKexSchemesList,
                     supportedEcdhProfilesList, requestedKeyTypeList);
@@ -328,34 +340,22 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             return;
         }
 
-        if (getNode().getSecurity2CommandClass() == null && kexReportDataFromNode != null
-                || getNode().getSecurity2CommandClass() != null && kexReportDataFromNode == null) {
-            logger.error(
-                    "NODE {}: SECURITY_2_INC State=FAILED, Reason=PROGRAMMATIC_ERROR security state out of sync: sec2cc={} kexReportDataFromNode={}",
-                    getNode().getNodeId(), getNode().getSecurity2CommandClass(), kexReportDataFromNode);
+        // Echo bit must be false / 0
+        if (echoBit) {
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_ECHO_1", getNode().getNodeId());
             continueSecurePairing.set(false);
             return;
         }
-        boolean joiningNodeMode = getNode().getSecurity2CommandClass() == null && kexReportDataFromNode == null;
-        if (joiningNodeMode) {
-            // CC:009F.01.05.11.008 The including node MUST return a KEX Set Command in response to this command if
-            // the “Echo” flag is set to ‘0’ and is performing S2 Bootstrapping.
-            if (echoBit == true) {
-                // TODO: remove these calls from this method and move up in shouldCOntinue logic in advancer
-                // controller.notifyEventListeners(
-                // new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
-                logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_ECHO_1", getNode().getNodeId());
-                continueSecurePairing.set(false);
-                return;
-            }
+        synchronized (kexDataLock) {
+            this.kexReportDataFromNode = currentKexReportData;
+            kexDataLock.notifyAll();
         }
-        this.kexReportDataFromNode = currentKexReportData;
+        // ZWaveNodeInitStageAdvancer will decide which keys to grant and trigger a send of KEX_SET
     }
 
-    private ZwaveKexData validateKexReport(Boolean csaBit, Boolean echoBit,
-            List<ZWaveS2KexScheme> supportedKexSchemesList,
-            List<ZWaveS2ECDHProfile> supportedEcdhProfilesList, List<ZWaveS2KeyType> requestedKeyTypeList)
-            throws ZWaveProtocolViolationException {
+    private ZWaveKexData validateKexReport(Boolean csaBit, Boolean echoBit,
+            List<ZWaveS2KexScheme> supportedKexSchemesList, List<ZWaveS2ECDHProfile> supportedEcdhProfilesList,
+            List<ZWaveKeyType> requestedKeyTypeList) throws ZWaveProtocolViolationException {
         // request CSA bit
         if (csaBit == null) {
             throw new ZWaveProtocolViolationException("KEX_REPORT csa bit was null");
@@ -386,8 +386,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
 
         // Supported ECDH profiles
         // CC:009F.01.05.11.014 Curve25519 MUST be supported by a node supporting the Security 2 Command Class.
-        if (supportedEcdhProfilesList.isEmpty()
-                || !supportedEcdhProfilesList.contains(ZWaveS2ECDHProfile.Curve25519)) {
+        if (supportedEcdhProfilesList.isEmpty() || !supportedEcdhProfilesList.contains(ZWaveS2ECDHProfile.Curve25519)) {
             throw new ZWaveProtocolViolationException(
                     "KEX_REPORT No common ECDH profiles found in " + supportedEcdhProfilesList,
                     ZWaveS2FailType.KEX_FAIL_KEX_CURVES);
@@ -402,9 +401,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         }
 
         // Everything checked out, return the holder object
-        return new ZwaveKexData(csaBit, supportedKexSchemesList, supportedEcdhProfilesList,
-                requestedKeyTypeList);
-
+        return new ZWaveKexData(csaBit, supportedKexSchemesList, supportedEcdhProfilesList, requestedKeyTypeList);
     }
 
     /**
@@ -420,7 +417,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      *
      * @return
      */
-    public ZWaveMessagePayloadTransaction buildKexSetMessageForInitialKeyExchange(ZwaveKexData kexSetData) {
+    public ZWaveMessagePayloadTransaction buildKexSetMessageForInitialKeyExchange(ZWaveKexData kexSetData) {
         this.kexSetDataSentToNode = kexSetData;
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildKexSet(kexSetData))
@@ -441,8 +438,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         Map<String, Object> responseTable = CommandClassSecurity2V1
                 .handleSecurity2KexReportOrKexSet(payload.getPayloadBuffer(), false);
         // Step 16. B->A : KEX Set (echo) : The KEX Set command received from Node A in step 5 is confirmed via the
-        // temporary secure channel.
-        // see CC:009F.01.00.11.097
+        // temporary secure channel. see CC:009F.01.00.11.097
+        if (getNode().getSecurityCommandClass() == null) {
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_NOT_SECURE", getNode().getNodeId());
+            continueSecurePairing.set(false);
+            return;
+        }
+
         Boolean echoFlag = (Boolean) responseTable.get("ECHO");
         if (echoFlag == false) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_INVALID echo=0", getNode().getNodeId());
@@ -451,8 +453,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         }
         Boolean requestCsaFlag = (Boolean) responseTable.get("CLIENT_SIDE_AUTHENTICATION");
 
-        List<ZWaveS2KexScheme> kexSchemesList = (List<ZWaveS2KexScheme>) responseTable
-                .get("SUPPORTED_KEX_SCHEMES");
+        List<ZWaveS2KexScheme> kexSchemesList = (List<ZWaveS2KexScheme>) responseTable.get("SUPPORTED_KEX_SCHEMES");
         if (kexSchemesList.size() > 1) {
             // Exactly one bit MUST be set to 1 CC:009F.01.06.11.010
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_INVALID mutliple kex schemes",
@@ -471,19 +472,17 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             return;
         }
 
-        List<ZWaveS2KeyType> grantedKeyTypeList = (List<ZWaveS2KeyType>) responseTable
-                .get("REQUESTED_KEYS");
+        List<ZWaveKeyType> grantedKeyTypeList = (List<ZWaveKeyType>) responseTable.get("REQUESTED_KEYS");
         logger.debug("NODE {}: grantedKeyTypeList {}", getNode().getNodeId(), grantedKeyTypeList);
 
-        ZwaveKexData kexSetEchoedData = new ZwaveKexData(requestCsaFlag, kexSchemesList,
-                ecdhProfilesList, grantedKeyTypeList);
-        if (this.kexSetDataSentToNode.equals(kexSetEchoedData) == false) {
-            // Exactly one bit MUST be set to 1 CC:009F.01.06.11.011
+        ZWaveKexData kexSetEchoedData = new ZWaveKexData(requestCsaFlag, kexSchemesList, ecdhProfilesList,
+                grantedKeyTypeList);
+        if (this.kexSetDataSentToNode.equalsIgnoreEcho(kexSetEchoedData) == false) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_AUTH_ECHO_MISMATCH",
                     getNode().getNodeId());
             continueSecurePairing.set(false);
-            protocolViolationException = new ZWaveProtocolViolationException(
-                    "KEX_SET echo did not match transmission", ZWaveS2FailType.KEX_FAIL_AUTH);
+            protocolViolationException = new ZWaveProtocolViolationException("KEX_SET echo did not match transmission",
+                    ZWaveS2FailType.KEX_FAIL_AUTH);
             return;
         }
 
@@ -683,7 +682,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     public void handleKeyGet(ZWaveCommandClassPayload payload, int endpoint) {
         Map<String, Object> response = CommandClassSecurity2V1.handleSecurity2KexGet(payload.getPayloadBuffer());
         // Requested keys
-        List<ZWaveS2KeyType> requestedKeyTypeList = (List<ZWaveS2KeyType>) response.get("REQUESTED_KEYS");
+        List<ZWaveKeyType> requestedKeyTypeList = (List<ZWaveKeyType>) response.get("REQUESTED_KEYS");
         // CC:009F.01.09.11.007 This field is used to request a network key. Only one key MUST be requested at a
         // time, i.e. only 1 bit MUST be set to ‘1’. This field MUST be encoded according to Table 19
         if (requestedKeyTypeList.size() != 1) {
@@ -691,11 +690,11 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                     requestedKeyTypeList.size());
             return;
         }
-        ZWaveS2KeyType keyType = requestedKeyTypeList.get(0);
+        ZWaveKeyType keyType = requestedKeyTypeList.get(0);
         // TODO: ensure the key they requested matches one we granted
 
         // Reply with NETWORK_KEY_REPORT
-        byte[] keyBytes = null; // TODO:
+        byte[] keyBytes = securityNetworkKeys.getKey(keyType).getEncoded();
         if (keyBytes.length != 16) {
             logger.error("NODE {}: network key {} is wrong size: {}", getNode().getNodeId(), keyType, keyBytes.length);
             return;
@@ -800,13 +799,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         boolean needToWait = (System.currentTimeMillis() - lastResponseQueuedAt) > TEN_SECONDS_MILLIS
                 || lastResponseQueuedCommandClass != expectedCommandClassSecurity2V1;
 
-        if (needToWait) {
+        while (needToWait) {
             try {
                 synchronized (lastResponseQueuedAt) {
                     lastResponseQueuedAt.wait(TEN_SECONDS_MILLIS);
                 }
             } catch (InterruptedException e) {
-                // Per Java Concurrency In Practice, Brian Gotez
+                // Per Java Concurrency In Practice, Brian Gotez TODO: are we sure?
                 Thread.currentThread().interrupt();
             }
         }
@@ -926,15 +925,12 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * @param requestedKeysList the list of keys which the node has requested
      * @return
      */
-    public List<ZWaveS2KeyType> buildKeysToSendList(List<ZWaveS2KeyType> requestedKeysList) {
-        // Find the strongest level requested and send only that key
-        // TODO: future - send multiple keys
-        ZWaveS2KeyType keyToSend = requestedKeysList.stream().sorted(Comparator.comparingInt(ZWaveS2KeyType::getSecurityLevel).reversed()).findFirst().get();
-        logger.debug("NODE: {} will send key {} out of original list {}", getNode().getNodeId(), keyToSend, requestedKeysList);
-        this.grantedKeysList = Collections.singletonList(keyToSend);
-        this.keysThatNeedToBeSent = new ArrayList(this.grantedKeysList);
+    public List<ZWaveKeyType> buildKeysToSendList(List<ZWaveKeyType> requestedKeysList) {
+        this.grantedKeysList = requestedKeysList.stream().sorted(Comparator.comparingInt(ZWaveKeyType::getSecurityLevel).reversed()).collect(Collectors.toList());
+        logger.debug("NODE: {} will send {} out of requested {}", getNode().getNodeId(), grantedKeysList, requestedKeysList);
+        this.keysThatNeedToBeSent = new ArrayList<>(this.grantedKeysList);
         // return defensive copy
-        return new ArrayList(this.grantedKeysList );
+        return new ArrayList<>(this.grantedKeysList );
     }
 
     @Override
@@ -974,10 +970,15 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             dataToEncrypt.write(payload);
 
             byte[] nonce = new byte[ENTROPHY_INPUT_SIZE];
-            inboundSpan.nextBytes(nonce);
+            ZWaveKeyType keyTypeInUse = ZWaveKeyType.S2_TEMP;
+            if(tempAesCcmKey == null) {
+                keyTypeInUse = grantedKeysList.get(0);
+            }
+            spanTable.get(keyTypeInUse).nextBytes(nonce);
 
             /*
-             *  Build the AAD - note that unlike typical AEAD crypto structures, the AAD is NOT included in the structure for ZWave.  Instead, the AAD is computed by each side independently.  See 3.6.4.4 AES-128 CCM Encryption and Authentication
+             *  Build the AAD - note that unlike typical AEAD crypto structures, the AAD is NOT included in the structure for ZWave.
+             *  Instead, the AAD is computed by each side independently.  See 3.6.4.4 AES-128 CCM Encryption and Authentication
              */
             byte[] tempAad = generateCcmAadData(controllerNodeId, getNode().getNodeId(), (short) 0, sequenceNumber,
                     hasUnencryptedExtension, hasEncryptedExtension, unencryptedExtensionBuffer);
@@ -993,12 +994,12 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             if (tempAesCcmKey == null) {
                 return cryptoOperations.encryptWithAesCcm(dataToEncrypt.toByteArray(), tempAesCcmKey, nonce, aad);
             } else {
-                return cryptoOperations.decryptWithAesCcm(dataToEncrypt.toByteArray(), keyTypeAssigned, nonce, aad);
+                SecretKey strongestKeyGranted = securityNetworkKeys.getKey(grantedKeysList.get(0));
+                return cryptoOperations.encryptWithAesCcm(dataToEncrypt.toByteArray(), strongestKeyGranted, nonce, aad);
             }
-        } catch (IOException |ZWaveCryptoException e) {
-            // TODO: supposed to send new nonce get with reset or something?
-            logger.error("NODE {}: S2 encapsulation failed", getNode().getNodeId(), e);
-            // TODO: need fail message?
+        } catch (ZWaveCryptoException | IOException e) {
+            logger.error("NODE {}: Error encapsulating security message with COMMAND_CLASS_SECURITY_2",
+                    getNode().getNodeId(), e);
             return null;
         }
     }
@@ -1031,7 +1032,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // TODO: validate sequence
         byte[] senderEntrophyInput = (byte[]) response.get("SPAN_SENDER_ENTROPHY");
         /*
-         *  CC:009F.01.00.11.00B  This field MUST contain all non-encrypted extension objects.
+         * CC:009F.01.00.11.00B  This field MUST contain all non-encrypted extension objects.
          * CC:009F.01.00.11.00C  This field MUST include the Length and Type fields prepending the actual data of each extension
          */
         byte[] nonEncryptedExtensionBytes = (byte[]) response.get("EXTENSION_BYTES");
@@ -1076,7 +1077,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             nonce = new byte[ENTROPHY_INPUT_SIZE];
             inboundSpan.nextBytes(nonce);
         } catch (ZWaveCryptoException | IOException e) {
-            logger.error("NODE {}: S2 decapsulation error, message dropped: error generating nonce from inboundSpan",
+            logger.error("NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2",
+                    getNode().getNodeId(), e);
+            logger.error(
+                    "NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2: error generating nonce from inboundSpan",
                     getNode().getNodeId(), e);
             return null; // fail silently since this is not in Table 11, Security 2 bootstrapping
         }
@@ -1085,14 +1089,30 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             if (tempAesCcmKey == null) {
                 return cryptoOperations.decryptWithAesCcm(cipherBytes, tempAesCcmKey, nonce, aad);
             } else {
-                return cryptoOperations.decryptWithAesCcm(cipherBytes, keyTypeAssigned, nonce, aad);
+                for (ZWaveKeyType keyType : grantedKeysList) {
+                    try {
+                        return cryptoOperations.decryptWithAesCcm(cipherBytes, keyType, nonce, aad);
+                    } catch (ZWaveCryptoException e) {
+                        logger.error("NODE: {} decryption attempt with key {} failed because of {}",
+                                getNode().getNodeId(), keyType, e.getMessage());
+                    }
+                }
+                logger.error(
+                        "NODE {}: Failed to decapsulate security message with COMMAND_CLASS_SECURITY_2: tried all keys",
+                        getNode().getNodeId());
+                return null;
             }
         } catch (ZWaveCryptoException e) {
             // TODO: supposed to send new nonce get with reset or something?
-            logger.error("NODE {}: S2 decapsulation failed, dropping message", getNode().getNodeId(), e);
+            logger.error("NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2: error ",
+                    getNode().getNodeId(), e);
             sendFailMessage(ZWaveS2FailType.KEX_FAIL_DECRYPT);
             return null;
         }
+    }
+
+    public static boolean doesCommandRequireSecurityEncapsulation(int commandKey) {
+        return SECURITY_REQUIRED_COMMANDS.contains(commandKey);
     }
 
     public AtomicBoolean getContinueSecurePairing() {
@@ -1103,13 +1123,33 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         return protocolViolationException;
     }
 
-    public ZwaveKexData getKexReportDataReceivedFromNode() {
-        return kexReportDataFromNode;
+    public ZWaveKexData waitForKexReportFromNode(TimeUnit unit, long duration) {
+        long stopAfter = System.currentTimeMillis() + unit.toMillis(duration);
+        synchronized (kexDataLock) {
+            while (kexReportDataFromNode == null || System.currentTimeMillis() < stopAfter) {
+                try {
+                    kexDataLock.wait();
+                } catch (InterruptedException e) {
+                    logger.debug(
+                            "NODE: {} Caught InterruptedException while waiting for keyReport, continuing to wait: ",
+                            getNode().getNodeId(), e.getMessage());
+                }
+            }
+            // kexReportDataFromNode may be null, which is fine
+            ZWaveKexData kexdata = kexReportDataFromNode;
+            kexReportDataFromNode = null;
+            return kexdata;
+        }
     }
 
     public byte[] getDeviceEcdhPublicKeyBytes() {
         // Must return a reference to the real array (as opposed to a defensive copy) so the user can set the 1st two
         // bits in authenticated mode
         return deviceEcdhPublicKeyBytes;
+    }
+
+    @Override
+    public void setNetworkKeys(ZWaveSecurityNetworkKeys securityNetworkKeys) {
+        this.securityNetworkKeys = securityNetworkKeys;
     }
 }

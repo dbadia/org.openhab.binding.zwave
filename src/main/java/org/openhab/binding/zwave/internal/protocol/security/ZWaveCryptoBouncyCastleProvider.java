@@ -105,7 +105,7 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
     private SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(
             EntropySourceProvider entrophySourceProvider, byte[] personalizationString, byte[] nonceBytes,
             boolean makePredictionResistant) throws ZWaveCryptoException { // TODO: remove
-                                                                                    // makePredictionResistant
+                                                                           // makePredictionResistant
         // @formatter:off
         /*
          * AES_128_CTR_DRNG is used for two different functions in the spec (CC:009F.01.00.11.016 and
@@ -122,8 +122,7 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
     }
 
     @Override
-    protected SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator()
-            throws ZWaveCryptoException {
+    protected SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator() throws ZWaveCryptoException {
         // TODO Auto-generated method stub
         return null;
     }

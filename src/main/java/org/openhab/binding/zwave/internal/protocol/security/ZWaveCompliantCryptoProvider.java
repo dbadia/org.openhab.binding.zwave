@@ -18,7 +18,7 @@ import javax.crypto.SecretKey;
  * @author Dave Badia
  *
  */
-abstract class ZWaveCryptoProvider {
+abstract class ZWaveCompliantCryptoProvider {
 
     /**
      * Create the PRNG per the following section of the spec
@@ -139,7 +139,7 @@ abstract class ZWaveCryptoProvider {
      * @return the strongest possible entrophy source available, which may or may not have been from a hardware RNG
      * @throws ZWaveCryptoException if an error occurs during the operation
      */
-    protected abstract SecureRandom buildEntrophySourceAccordingToZwaveSpec() throws ZWaveCryptoException;
+    protected abstract SecureRandom buildEntropySourceAccordingToZwaveSpec() throws ZWaveCryptoException;
 
     /**
      * CC:009F.01.00.11.002

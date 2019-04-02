@@ -30,7 +30,7 @@ import com.sun.istack.internal.NotNull;
  * @author Dave Badia
  *
  */
-public abstract class ZWaveCryptoProviderJCEJava8 extends ZWaveCryptoProvider {
+public abstract class ZWaveCryptoProviderJCEJava8 extends ZWaveCompliantCryptoProvider {
     protected static final String ALGORITHM_EC = "EC";
     /**
      * The name of the JCE provider to use. Will be passed to all JCE API calls to force this use of this provider.
@@ -108,7 +108,7 @@ public abstract class ZWaveCryptoProviderJCEJava8 extends ZWaveCryptoProvider {
      * {@inheritDoc}
      */
     @Override
-    protected SecureRandom buildEntrophySourceAccordingToZwaveSpec() throws ZWaveCryptoException {
+    protected SecureRandom buildEntropySourceAccordingToZwaveSpec() throws ZWaveCryptoException {
         // SPEC_VIOLATION This is currently out of compliance with the zwave spec as it requires a hardware source of
         // entropy. See CC:009F.01.00.11.017
         try {

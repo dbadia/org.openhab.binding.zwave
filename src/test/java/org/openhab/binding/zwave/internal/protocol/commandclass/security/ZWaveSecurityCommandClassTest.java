@@ -16,6 +16,7 @@ import static org.junit.Assert.*;
 
 import java.util.Arrays;
 
+import org.apache.commons.lang.NotImplementedException;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,13 +43,14 @@ public class ZWaveSecurityCommandClassTest {
         ZWaveController controller = Mockito.mock(ZWaveController.class);
         ZWaveEndpoint endpoint = Mockito.mock(ZWaveEndpoint.class);
         ZWaveSecurity0CommandClass security = new ZWaveSecurity0CommandClass(node, controller, endpoint);
-        security.setNetworkKey(TEST_KEY);
+        // TODO: security.setNetworkKey(TEST_KEY);
+        // TODO: uncomment
         // byte[] actualBytes = security.generateMAC((byte) CommandClassSecurityV1.SECURITY_MESSAGE_ENCAPSULATION, data,
         // (byte) 1, (byte) 2, iv);
         // assertTrue(Arrays.equals(expectedBytes, actualBytes));
     }
 
-    @Ignore
+    @Ignore // TODO:
     @Test
     public void testEncapsulatePayload() throws Exception {
         byte nodeId = 0x01;
@@ -73,11 +75,17 @@ public class ZWaveSecurityCommandClassTest {
 
         // Create the receive node
         ZWaveSecurity0CommandClass securityRx = new ZWaveSecurity0CommandClass(nodeRx, controllerRx, endpoint);
-        securityRx.setNetworkKey(TEST_KEY);
+        if (true) {
+            throw new NotImplementedException();
+        }
+        // TODO: securityRx.setNetworkKey(TEST_KEY);
 
         // Create the transmit node
         ZWaveSecurity0CommandClass securityTx = new ZWaveSecurity0CommandClass(nodeTx, controllerTx, endpoint);
-        securityTx.setNetworkKey(TEST_KEY);
+        if (true) {
+            throw new NotImplementedException();
+        }
+        // TODO: securityTx.setNetworkKey(TEST_KEY);
 
         // Create the nonce request in the transmit node, and send it to the receive node
         ZWaveCommandClassTransactionPayload nonceGet = securityTx.getSecurityNonceGet();

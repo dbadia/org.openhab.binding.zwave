@@ -30,6 +30,8 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveNode;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionPriority;
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveNonce;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayloadBuilder;
 import org.slf4j.Logger;
@@ -55,7 +57,7 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
             0x55, 0x55, 0x55, 0x55, 0x55 };
 
     @XStreamOmitField
-    private SecretKey networkKey;
+    private ZWaveSecurityNetworkKeys networkKeys;
 
     @XStreamOmitField
     private SecretKey txEncryptionKey;
@@ -83,10 +85,10 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
 
     public static final String AES = "AES";
 
-    private static final List<Byte> securityRequired = Arrays.asList(new Byte[] {
+    private static final List<Integer> SECURITY_REQUIRED_COMMANDS = Arrays.asList(
             CommandClassSecurityV1.NETWORK_KEY_SET, CommandClassSecurityV1.NETWORK_KEY_VERIFY,
             CommandClassSecurityV1.SECURITY_SCHEME_INHERIT, CommandClassSecurityV1.SECURITY_COMMANDS_SUPPORTED_GET,
-            CommandClassSecurityV1.SECURITY_COMMANDS_SUPPORTED_REPORT });
+            CommandClassSecurityV1.SECURITY_COMMANDS_SUPPORTED_REPORT);
 
     /**
      * Creates a new instance of the ZWaveSecurityCommandClass class.
@@ -153,7 +155,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
      */
     public ZWaveCommandClassTransactionPayload getSetSecurityKeyMessage() {
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
-                getNode().getNodeId(), CommandClassSecurityV1.getNetworkKeySet(networkKey.getEncoded()))
+                getNode().getNodeId(),
+                CommandClassSecurityV1.getNetworkKeySet(networkKeys.getKey(ZWaveKeyType.S0).getEncoded()))
                         .withExpectedResponseCommand(CommandClassSecurityV1.NETWORK_KEY_VERIFY)
                         .withPriority(TransactionPriority.Immediate).build();
         payload.setRequiresSecurity();
@@ -162,6 +165,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
     }
 
     /**
+     * Step 27. B->A : Security 2 Network Key Verify see CC:009F.01.00.11.095
+     *
      * When the included node has received a Network Key Set that is has successfully decrypted, verified by the MAC, it
      * MUST send a Network Key Verify Command to the including controller. If the controller is capable of decrypting
      * the Network Key Verify command it would indicate that the included node has successfully entered the secure
@@ -339,7 +344,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
 
             return (byte[]) response.get("COMMAND_BYTE");
         } catch (GeneralSecurityException e) {
-            logger.error("NODE {}: Error decapsulating security message", getNode().getNodeId(), e);
+            logger.error("NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY",
+                    getNode().getNodeId(), e);
         }
 
         return null;
@@ -383,7 +389,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
 
             return securePayload;
         } catch (GeneralSecurityException e) {
-            logger.error("NODE {}: Error encapsulating security message", getNode().getNodeId(), e);
+            logger.error("NODE {}: Error encapsulating security message with COMMAND_CLASS_SECURITY",
+                    getNode().getNodeId(), e);
         }
         return null;
     }
@@ -392,22 +399,11 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
      * Sets the network key. The key is provided as a string of hexadecimal values. Values can be space or comma
      * delimited, or can have no separation between values. Values can be prefixed with 0x or not.
      *
-     * @param value {@link String} containing the new network key
      */
-    public void setNetworkKey(String value) {
-        if (value == null) {
-            logger.debug("Network key must not be null");
-            return;
-        }
-
-        byte[] keyBytes = parseNetworkKeyAsHexString(value);
-
-        if (keyBytes != null) {
-            networkKey = new SecretKeySpec(keyBytes, AES);
-            logger.debug("NODE {}: Updated networkKey", getNode().getNodeId());
-
-            setupNetworkKey(false);
-        }
+    @Override
+    public void setNetworkKeys(ZWaveSecurityNetworkKeys networkKeys) {
+        // Do nothing with the keys at this point as they may not be available yet
+        this.networkKeys = networkKeys;
     }
 
     protected byte[] parseNetworkKeyAsHexString(String hexStringParam) {
@@ -445,31 +441,31 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
                         getNode().getNodeId());
                 // Scheme0 network key is a key of all zeros
                 key = new SecretKeySpec(new byte[16], AES);
+
+                // Derived the message encryption key from the network key
+                cipher = Cipher.getInstance("AES/ECB/NoPadding");
+                cipher.init(Cipher.ENCRYPT_MODE, key);
+                txEncryptionKey = new SecretKeySpec(cipher.doFinal(DERIVE_ENCRYPT_KEY), AES);
+
+                // Derived the message auth key from the network key
+                cipher.init(Cipher.ENCRYPT_MODE, key);
+                txAuthenticationKey = new SecretKeySpec(cipher.doFinal(DERIVE_AUTH_KEY), AES);
             } else {
                 // Use the real key
                 logger.trace("NODE {}: Using Real Network Key.", getNode().getNodeId());
-                key = networkKey;
+                SecretKey networkKey = networkKeys.getKey(ZWaveKeyType.S0);
+
+                // Always use the real key for RX
+
+                // Derived the message encryption key from the network key
+                cipher = Cipher.getInstance("AES/ECB/NoPadding");
+                cipher.init(Cipher.ENCRYPT_MODE, networkKey);
+                rxEncryptionKey = new SecretKeySpec(cipher.doFinal(DERIVE_ENCRYPT_KEY), AES);
+
+                // Derived the message auth key from the network key
+                cipher.init(Cipher.ENCRYPT_MODE, networkKey);
+                rxAuthenticationKey = new SecretKeySpec(cipher.doFinal(DERIVE_AUTH_KEY), AES);
             }
-
-            // Derived the message encryption key from the network key
-            cipher = Cipher.getInstance("AES/ECB/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, key);
-            txEncryptionKey = new SecretKeySpec(cipher.doFinal(DERIVE_ENCRYPT_KEY), AES);
-
-            // Derived the message auth key from the network key
-            cipher.init(Cipher.ENCRYPT_MODE, key);
-            txAuthenticationKey = new SecretKeySpec(cipher.doFinal(DERIVE_AUTH_KEY), AES);
-
-            // Always use the real key for RX
-
-            // Derived the message encryption key from the network key
-            cipher = Cipher.getInstance("AES/ECB/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, networkKey);
-            rxEncryptionKey = new SecretKeySpec(cipher.doFinal(DERIVE_ENCRYPT_KEY), AES);
-
-            // Derived the message auth key from the network key
-            cipher.init(Cipher.ENCRYPT_MODE, networkKey);
-            rxAuthenticationKey = new SecretKeySpec(cipher.doFinal(DERIVE_AUTH_KEY), AES);
 
         } catch (GeneralSecurityException e) {
             logger.error("NODE {}: Error building derived keys {}", getNode().getNodeId(), e);
@@ -477,7 +473,7 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
     }
 
     public static boolean doesCommandRequireSecurityEncapsulation(int commandKey) {
-        return securityRequired.contains(commandKey);
+        return SECURITY_REQUIRED_COMMANDS.contains(commandKey);
     }
 
     public boolean isNonceAvailable() {

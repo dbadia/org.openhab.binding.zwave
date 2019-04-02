@@ -141,11 +141,8 @@ public class ZWaveNode {
     @XStreamOmitField
     Long inclusionTimer = null;
 
-    /**
-     * ZWaveSecurity2CommandClass has state specific to this node, so we must keep a reference to the given instance and
-     * persist it
-     */
-    private volatile ZWaveSecurity2CommandClass security2CommandClass = null;
+    @XStreamOmitField
+    private volatile ZWaveSecurityCommand securityCommandClass = null;
 
     /**
      * Constructor. Creates a new instance of the ZWaveNode class.
@@ -899,7 +896,8 @@ public class ZWaveNode {
 
     public boolean doesMessageRequireSecurityEncapsulation(int endpoint, ZWaveCommandClassPayload payload) {
         // Does this node support security at all?
-        if (endpoints.get(0).getCommandClass(CommandClass.COMMAND_CLASS_SECURITY) == null) {
+        if (endpoints.get(0).getCommandClass(CommandClass.COMMAND_CLASS_SECURITY) == null
+                && endpoints.get(0).getCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2) == null) {
             logger.debug("NODE {}: SECURITY not supported", nodeId);
             return false;
         }
@@ -910,6 +908,12 @@ public class ZWaveNode {
             logger.debug("NODE {}: SECURITY check internal", nodeId);
             // CommandClass.SECURITY is a special case because only some commands get encrypted
             return ZWaveSecurity0CommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
+        }
+
+        if (CommandClass.COMMAND_CLASS_SECURITY_2 == commandClass) {
+            logger.debug("NODE {}: SECURITY_2 check internal", nodeId);
+            // CommandClass.SECURITY_2 is a special case because only some commands get encrypted
+            return ZWaveSecurity2CommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
         }
 
         // PING should not be encrypted
@@ -1214,7 +1218,6 @@ public class ZWaveNode {
         incrementReceiveCount();
 
         boolean securityDecapOk = false;
-        ZWaveSecurityCommand securityCommandClass = null;
 
         if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_TRANSPORT_SERVICE.getKey()) {
             logger.debug("NODE {}: Decapsulating COMMAND_CLASS_TRANSPORT_SERVICE", getNodeId());
@@ -1229,37 +1232,36 @@ public class ZWaveNode {
                 return null;
             }
 
-            ZWaveSecurity0CommandClass security0CommandClass = (ZWaveSecurity0CommandClass) endpoints.get(0)
+            // TODO: S0 - is this really necessary? Seems no as the security class is written in XML - just assign keys
+            // from elsewhere
+            ZWaveSecurity0CommandClass security0CommandClassEndpoint0 = (ZWaveSecurity0CommandClass) endpoints.get(0)
                     .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
-            if (security0CommandClass == null) {
+            if (security0CommandClassEndpoint0 == null) {
                 logger.debug("NODE {}: COMMAND_CLASS_SECURITY not found in endpoint 0", getNodeId());
 
-                security0CommandClass = (ZWaveSecurity0CommandClass) ZWaveCommandClass
+                security0CommandClassEndpoint0 = (ZWaveSecurity0CommandClass) ZWaveCommandClass
                         .getInstance(CommandClass.COMMAND_CLASS_SECURITY.getKey(), this, controller);
-                if (security0CommandClass != null) {
+                if (security0CommandClassEndpoint0 != null) {
                     logger.debug("NODE {}: Adding COMMAND_CLASS_SECURITY", nodeId);
-                    security0CommandClass.setNetworkKey(controller.getS0SecurityKey());
-                    addCommandClass(security0CommandClass);
+                    security0CommandClassEndpoint0.setNetworkKeys(controller.getSecurityKeys());
+                    addCommandClass(security0CommandClassEndpoint0);
                 } else {
                     logger.debug("NODE {}: Unable to instantiate COMMAND_CLASS_SECURITY", nodeId);
                     return null;
                 }
             }
-            securityCommandClass = security0CommandClass;
+            securityCommandClass = security0CommandClassEndpoint0;
 
         } else if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_SECURITY_2.getKey()
                 && (payload.getCommandClassCommand() == SECURITY_2_MESSAGE_ENCAPSULATION
-                        || payload.getCommandClassCommand() == SECURITY_2_COMMANDS_NONCE_GET)) {// TODO:Why NONCE_GET if
-                                                                                                // it's not decryptable
+                        || payload.getCommandClassCommand() == SECURITY_2_COMMANDS_NONCE_GET)) {
+
             logger.debug("NODE {}: Decapsulating COMMAND_CLASS_SECURITY_2", getNodeId());
-            if (security2CommandClass == null) {
-                // Security2 has unique keys for all nodes, so there's nothing we can do but fail if the class is
-                // missing
-                logger.error("NODE {}: recevied encapsulated message but COMMAND_CLASS_SECURITY_2 is null",
-                        getNodeId());
+
+            if (endpoints.get(0) == null) {
+                logger.debug("NODE {}: No endpoint 0!", getNodeId());
                 return null;
             }
-            securityCommandClass = security2CommandClass;
 
         } else if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_CRC_16_ENCAP.getKey()
                 && payload.getCommandClassCommand() == 1) {
@@ -1427,6 +1429,14 @@ public class ZWaveNode {
         inclusionTimer = System.nanoTime();
     }
 
+    public ZWaveSecurityCommand getSecurityCommandClass() {
+        return securityCommandClass;
+    }
+
+    public void setSecurityCommandClass(ZWaveSecurityCommand securityCommandClass) {
+        this.securityCommandClass = securityCommandClass;
+    }
+
     /**
      * Sets the device as awake if the device is normally not listening.
      *
@@ -1473,14 +1483,6 @@ public class ZWaveNode {
         logger.trace("NODE {}: listening == {}, frequentlyListening == {}, awake == {}", getNodeId(), listening,
                 frequentlyListening, awake);
         return (listening == true || frequentlyListening == true || awake == true);
-    }
-
-    public ZWaveSecurity2CommandClass getSecurity2CommandClass() {
-        return security2CommandClass;
-    }
-
-    public void setSecurity2CommandClass(ZWaveSecurity2CommandClass security2CommandClass) {
-        this.security2CommandClass = security2CommandClass;
     }
 
     /**

@@ -46,7 +46,7 @@ public class ZWaveInclusionControllerTest {
         ArgumentCaptor<ZWaveNode> nodeCapture = ArgumentCaptor.forClass(ZWaveNode.class);
         Mockito.doNothing().when(controller).includeNode(nodeCapture.capture());
 
-        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, "");
+        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, null);
         assertEquals(ZWaveInclusionState.Unknown, inclusionController.getState());
 
         ZWaveMessagePayloadTransaction txFrame;
@@ -115,7 +115,7 @@ public class ZWaveInclusionControllerTest {
         ArgumentCaptor<ZWaveNode> nodeCapture = ArgumentCaptor.forClass(ZWaveNode.class);
         Mockito.doNothing().when(controller).includeNode(nodeCapture.capture());
 
-        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, "");
+        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, null);
         assertEquals(ZWaveInclusionState.Unknown, inclusionController.getState());
 
         ZWaveMessagePayloadTransaction txFrame;
@@ -162,7 +162,7 @@ public class ZWaveInclusionControllerTest {
         ArgumentCaptor<ZWaveNode> nodeCapture = ArgumentCaptor.forClass(ZWaveNode.class);
         Mockito.doNothing().when(controller).includeNode(nodeCapture.capture());
 
-        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, "");
+        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, null);
         assertEquals(ZWaveInclusionState.Unknown, inclusionController.getState());
 
         ZWaveMessagePayloadTransaction txFrame;
@@ -206,7 +206,7 @@ public class ZWaveInclusionControllerTest {
         ArgumentCaptor<ZWaveNode> nodeCapture = ArgumentCaptor.forClass(ZWaveNode.class);
         Mockito.doNothing().when(controller).includeNode(nodeCapture.capture());
 
-        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, "");
+        ZWaveInclusionController inclusionController = new ZWaveInclusionController(controller, null);
         assertEquals(ZWaveInclusionState.Unknown, inclusionController.getState());
 
         ZWaveMessagePayloadTransaction txFrame;
