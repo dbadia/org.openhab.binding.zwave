@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.SecretKey;
 
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoRuntimeException;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

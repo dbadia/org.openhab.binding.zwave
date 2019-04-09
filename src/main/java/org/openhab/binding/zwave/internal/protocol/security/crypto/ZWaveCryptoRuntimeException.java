@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.security;
+package org.openhab.binding.zwave.internal.protocol.security.crypto;
 
 public class ZWaveCryptoRuntimeException extends RuntimeException {
     private static final long serialVersionUID = 2567941786693226712L;

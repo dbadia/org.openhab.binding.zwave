@@ -62,9 +62,9 @@ import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkStateEvent;
-import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoOperations;
-import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoOperationsFactory;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperations;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.RemoveFailedNodeMessageClass.Report;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
@@ -171,8 +171,8 @@ public ZWaveControllerHandler(@NonNull Bridge bridge) {
 
         if (networkSecurityKeys.missingKeys().isEmpty() == false) {
             // Key generation is slow on some platforms so we must run it in the background
-            Thread keyGeneationThread = new NetworkKeyGenerationThread(networkSecurityKeys);
-            keyGeneationThread.start();
+            Thread keyGenerationThread = new NetworkKeyGenerationThread(networkSecurityKeys);
+            keyGenerationThread.start();
         }
 
         param = getConfig().get(CONFIGURATION_HEALTIME);

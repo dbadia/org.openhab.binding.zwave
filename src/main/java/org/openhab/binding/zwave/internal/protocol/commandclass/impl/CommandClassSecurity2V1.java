@@ -19,12 +19,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2BitmaskEnumType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2EncapsulationExtensionType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,11 +62,11 @@ public class CommandClassSecurity2V1 {
     private final static Map<Class<? extends Enum>, Map<Integer, ZWaveS2BitmaskEnumType>> ENUM_LOOKUP_TABLE_CACHE = new ConcurrentHashMap<>();
 
     public static byte[] buildKexGet() {
-        logger.debug("Creating command message SECURITY_2_COMMANDS_NONCE_GET version 1");
+        logger.debug("Creating command message KEX_GET version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
-        outputData.write(SECURITY_2_COMMANDS_NONCE_GET);
+        outputData.write(KEX_GET);
 
         return outputData.toByteArray();
     }
@@ -87,8 +87,7 @@ public class CommandClassSecurity2V1 {
     /**
      * KEX_SET and KEX_REPORT contain identical fields
      */
-    private static void writeKexData(ByteArrayOutputStream outputData, boolean echoFlag,
-            ZWaveKexData kexData) {
+    private static void writeKexData(ByteArrayOutputStream outputData, boolean echoFlag, ZWaveKexData kexData) {
         // bitmask (1 byte)
         BitSet bitmask = new BitSet(8); // All zeros - all off
 
@@ -136,8 +135,7 @@ public class CommandClassSecurity2V1 {
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Requested Key' (1 byte)
-        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class,
-                ZWaveKeyType.class);
+        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class, ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -171,13 +169,12 @@ public class CommandClassSecurity2V1 {
         responseTable.put("SUPPORTED_KEX_SCHEMES", supportedKexSchemesList);
 
         // Parse 'Supported ECDH Profiles' (1 byte)
-        List<ZWaveS2ECDHProfile> supportedECDHProfilesList = parseBitMask(payload[4],
-                ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);
+        List<ZWaveS2ECDHProfile> supportedECDHProfilesList = parseBitMask(payload[4], ZWaveS2ECDHProfile.class,
+                ZWaveS2ECDHProfile.class);
         responseTable.put("SUPPORTED_ECDH_PROFILES", supportedECDHProfilesList);
 
         // Parse 'Requested Keys' (1 byte)
-        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class,
-                ZWaveKeyType.class);
+        List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class, ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
         // Return the map of processed response data;
@@ -258,6 +255,26 @@ public class CommandClassSecurity2V1 {
         }
 
         return outputData.toByteArray();
+    }
+
+    public static Map<String, Object> handleNonceReport(byte[] payload) {
+        logger.debug("Parsing NONCE_REPORT");
+        Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
+
+        byte sequenceNumber = (byte) (payload[0] & 0xFF);
+        responseTable.put("SEQUENCE_NUMBER", sequenceNumber);
+
+        byte outOfSyncMask = (byte) (payload[1] & 0xFF);
+        // Parse MOS and SOS
+        responseTable.put("SOS", Boolean.valueOf((outOfSyncMask & 0x1) == 1));
+        responseTable.put("MOS", Boolean.valueOf((outOfSyncMask & 0x2) == 1));
+
+        if (payload.length == 18) {
+            byte[] nonce = new byte[16];
+            System.arraycopy(payload, 2, nonce, 0, 16);
+            responseTable.put("NONCE", nonce);
+        }
+        return responseTable;
     }
 
     /**
@@ -383,9 +400,12 @@ public class CommandClassSecurity2V1 {
     // TODO: move this to a test case, test each enu
     public static void main(String[] args) {
         try {
-            List<ZWaveS2ECDHProfile> listEcdhProfileList = parseBitMask((byte) 255,
-                    ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);
-            System.out.println(listEcdhProfileList);
+            byte check = 0;
+            int here = check & 0x1;
+            System.out.println(here == 1);
+            // List<ZWaveS2ECDHProfile> listEcdhProfileList = parseBitMask((byte) 255, ZWaveS2ECDHProfile.class,
+            // ZWaveS2ECDHProfile.class);
+            // System.out.println(listEcdhProfileList);
         } catch (Exception e) {
             e.printStackTrace();
         }

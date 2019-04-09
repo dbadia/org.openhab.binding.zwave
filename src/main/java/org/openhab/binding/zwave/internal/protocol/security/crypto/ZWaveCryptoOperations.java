@@ -1,15 +1,22 @@
-package org.openhab.binding.zwave.internal.protocol.security;
+package org.openhab.binding.zwave.internal.protocol.security.crypto;
 
 import static org.openhab.binding.zwave.internal.protocol.SerialMessage.bb2hex;
 
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.SecureRandom;
 import java.security.interfaces.ECPrivateKey;
+import java.util.Arrays;
 import java.util.BitSet;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCmac;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDebug;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,15 +37,40 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class ZWaveCryptoOperations {
-    public static final int NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS = 128;
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperations.class);
+
+    public static final int NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS = 128;
+
+    /*
+     * ConstNonce = 0x26 repeated 16 times
+     */
+    public static final byte[] CONST_NONCE_CONSTANT = new byte[16];
+
+    /*
+     * ConstEntropyInput = 0x88 repeated 15 times
+     */
+    public static final byte[] CONST_ENTROPHY_INPUT_CONSTANT = new byte[16];
+
+    public static final byte[] CKDF_TEMP_EXTRACT_CONSTANT = new byte[16];
+
+    // per CC:009F.01.00.11.00F
+    private static final byte[] SPAN_PERSONALIZATION_STRING = "PersonalizationString".getBytes(StandardCharsets.UTF_8);
+    // per CC:009F.01.00.11.016
+    private static final byte[] PRNG_PERSONALIZATION_STRING = new byte[32];
+    private static final byte[] NONCE_NONE = new byte[0];
 
     /**
      * The keys used for secure message exchange after secure inclusion
      */
     private final ZWaveSecurityNetworkKeys networkSecurityKeys;
 
-    private final ZWaveCompliantCryptoProvider zWaveComplaintCryptoProvider;
+    private final ZWaveCryptoAesAeadCcm aeadCcmProvider;
+
+    private final ZWaveCryptoAesCmac cmacProvider;
+
+    private final ZWaveCryptoAesCtrDebug ctrDrbgProvider;
+
+    private final ZWaveCryptoDiffieHellman diffieHellmanProvider;
 
     /**
      * CC:009F.01.00.11.015 The PRNG MUST be used for:
@@ -48,16 +80,32 @@ public class ZWaveCryptoOperations {
      */
     private final SecureRandom prng;
 
-    protected ZWaveCryptoOperations(ZWaveCompliantCryptoProvider zWaveComplaintCryptoProvider,
-            ZWaveSecurityNetworkKeys networkSecurityKeysFromConfig, SecureRandom prng) {
-        this.zWaveComplaintCryptoProvider = zWaveComplaintCryptoProvider;
+    static {
+        byte aByte = 0x33 & 0xFF;
+        Arrays.fill(CKDF_TEMP_EXTRACT_CONSTANT, aByte);
+
+        aByte = 0x26 & 0xFF;
+        Arrays.fill(CONST_NONCE_CONSTANT, aByte);
+
+        aByte = (byte) (0x88 & 0xFF);
+        Arrays.fill(CONST_ENTROPHY_INPUT_CONSTANT, aByte);
+    }
+
+    protected ZWaveCryptoOperations(ZWaveSecurityNetworkKeys networkSecurityKeys, ZWaveCryptoAesAeadCcm aeadCcmProvider,
+            ZWaveCryptoAesCmac cmacProvider, ZWaveCryptoAesCtrDebug ctrDrbgProvider,
+            ZWaveCryptoDiffieHellman diffieHellmanProvider, SecureRandom prng) {
+        super();
+        this.networkSecurityKeys = networkSecurityKeys;
+        this.aeadCcmProvider = aeadCcmProvider;
+        this.cmacProvider = cmacProvider;
+        this.ctrDrbgProvider = ctrDrbgProvider;
+        this.diffieHellmanProvider = diffieHellmanProvider;
         this.prng = prng;
-        this.networkSecurityKeys = networkSecurityKeysFromConfig;
     }
 
     public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes,
             int nodeIdForLogging) throws ZWaveCryptoException {
-        return zWaveComplaintCryptoProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
+        return diffieHellmanProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
                 nodeIdForLogging);
     }
 
@@ -66,11 +114,11 @@ public class ZWaveCryptoOperations {
      * PRNG function (3.6.4.6).
      */
     public KeyPair generateECDHKeyPair() throws ZWaveCryptoException {
-        return zWaveComplaintCryptoProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
+        return diffieHellmanProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
     }
 
     public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
-        return zWaveComplaintCryptoProvider.performAesCmac(secretKey, dataToMacArray);
+        return cmacProvider.performAesCmac(secretKey, dataToMacArray);
     }
 
     public SecretKey buildAESKey(byte[] keyBytes) {
@@ -104,8 +152,7 @@ public class ZWaveCryptoOperations {
     }
 
     public int computeAesCcmOutputSize(int plaintextLength, byte[] nonce, byte[] additionalAuthenticationData) {
-        return zWaveComplaintCryptoProvider.computeAesCcmOutputSize(plaintextLength, nonce,
-                additionalAuthenticationData);
+        return aeadCcmProvider.computeAesCcmOutputSize(plaintextLength, nonce, additionalAuthenticationData);
     }
 
     /**
@@ -127,10 +174,61 @@ public class ZWaveCryptoOperations {
             logger.debug("encryptWithAesCcm with {} ciphertextBytes={} key={} nonce={} aad={}", keyDescription,
                     bb2hex(inputBytes), bb2hex(keyBytes), bb2hex(nonce), bb2hex(additionalAuthenticationData));
         }
-        return zWaveComplaintCryptoProvider.performAesCcmCrypt(encrypt, inputBytes, keyBytes, nonce,
-                additionalAuthenticationData);
+        return aeadCcmProvider.performAesCcmCrypt(encrypt, inputBytes, keyBytes, nonce, additionalAuthenticationData);
     }
 
+    /**
+     * TODO: zDoc
+     *
+     */
+    public SecureRandom instantiateSpan(byte[] senderEntrophyInput, byte[] receiverEntrophyInput)
+            throws ZWaveCryptoException {
+        // 3.6.4.9.1 SPAN Instantiation
+        // Mix the 32 bytes EI into MEI, using CKDF-MEI-Extract and CKDF-MEI-Expand functions
+        // CC:009F.01.00.11.00F The CTR_DRBG MUST be instantiated using the following profile
+
+        // @formatter:off
+        /*
+         * 3.6.4.9.1.1.1 CKDF-MEI-Extract
+         * CKDF-MEI-Extract(ConstNonce, SenderEI | ReceiverEI) -> NoncePRK
+         *  The Input is defined by:
+         *      o ConstNonce = 0x26 repeated 16 times
+         *  The Output is obtained by:
+         *      o NoncePRK = CMAC(ConstNonce, SenderEI | ReceiverEI)
+         */
+        // @formatter:on
+        SecretKey constNonceKey = buildAESKey(CONST_NONCE_CONSTANT);
+        byte[] noncePrk = performAesCmac(constNonceKey, senderEntrophyInput, receiverEntrophyInput);
+
+        // @formatter:off
+        /*
+         * 3.6.4.9.1.1.2 CKDF-MEI-Expand
+         * CKDF-MEI-Expand(NoncePRK, ConstEntropyInput) -> MEI
+         *  The Input is defined by:
+         *      o NoncePRK is the pseudo random value obtained in the Extract step.
+         *      o ConstEntropyInput = 0x88 repeated 15 times
+         *  The Output is obtained by:
+         *      o T0 = ConstEntropyInput | 0x00
+         *      o T1 = CMAC(NoncePRK, T0 | ConstEntropyInput | 0x01)
+         *      o T2 = CMAC(NoncePRK, T1 | ConstEntropyInput | 0x02)
+         *      o MEI = T1 | T2
+         */
+        // @formatter:om
+        SecretKey noncePrkKey = buildAESKey(noncePrk);
+        int constLength = CONST_ENTROPHY_INPUT_CONSTANT.length;
+        byte[] T0 = new byte[constLength + 1];
+        System.arraycopy(CONST_ENTROPHY_INPUT_CONSTANT, 0, T0, 0, constLength);
+        T0[constLength] = 0x00;
+        byte[] T1 = performAesCmac(noncePrkKey, T0, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] {0x01});
+        byte[] T2 = performAesCmac(noncePrkKey, T1, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] {0x02});
+        byte[] mei = new byte[T1.length + T2.length];
+        System.arraycopy(T1, 0, mei, 0, T1.length);
+        System.arraycopy(T2, 0, mei, T1.length, T2.length);
+        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, SPAN_PERSONALIZATION_STRING, NONCE_NONE, false);
+    }
+
+
+    // TODO: delete
     public static void main(String[] args) {
         try {
             BitSet bitSet = new BitSet(8); // All zeros
@@ -149,29 +247,4 @@ public class ZWaveCryptoOperations {
             e.printStackTrace();
         }
     }
-
-    // TODO: delete
-    // public void setKey(String networkKeyConstant, String networkKeyHex) {
-    // ZWaveSecurity2KeyType keyType = ZWaveSecurity2KeyType.mapFromControllerString(networkKeyConstant);
-    // if (keyType == null) {
-    // logger.error("Could not map {} to a ZWaveSecurity2KeyType, key not set", networkKeyConstant);
-    // return;
-    // }
-    // byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(networkKeyHex);
-    // aesCcmKeyTable.put(keyType, new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES));
-    // }
-
-    /*
-     * This method is static as it is called from ZWaveControllerHandler which needs to execute
-     * quickly. Any call to ZWaveSecurity2CryptoOperations.getInstance() will trigger entropy gathering which is quite
-     * time consuming
-     */
-    // public static void setKeyTable(Map<ZWaveS2KeyType, String> networkKeyTable) {
-    // aesCcmKeyTable = new ConcurrentHashMap<>();
-    // for (Map.Entry<ZWaveS2KeyType, String> entry : networkKeyTable.entrySet()) {
-    // byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(entry.getValue());
-    // aesCcmKeyTable.put(entry.getKey(), new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES));
-    // }
-    // }
-
 }

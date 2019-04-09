@@ -1,9 +1,9 @@
-package org.openhab.binding.zwave.internal.protocol.security;
+package org.openhab.binding.zwave.internal.protocol.security.crypto.old;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
-import org.bouncycastle.crypto.EntropySource;
 import org.bouncycastle.crypto.EntropySourceProvider;
 import org.bouncycastle.crypto.InvalidCipherTextException;
 import org.bouncycastle.crypto.engines.AESEngine;
@@ -11,13 +11,13 @@ import org.bouncycastle.crypto.fips.FipsDRBG;
 import org.bouncycastle.crypto.modes.CCMBlockCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.util.BasicEntropySourceProvider;
-import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
-    private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoProviderJCEJava8.class);
+// TODO: delete all in this package
+class ZWaveCryptoProviderImpl {
+    private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoProviderImpl.class);
 
     /**
      * 3.6.4.4.1 CCM profile CC:009F.01.00.11.006
@@ -39,12 +39,11 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
      */
     private static final byte[] DUMMY_NONCE = new byte[AES_CCM_NONCE_LENGTH];
 
-    protected ZWaveCryptoBouncyCastleProvider() throws ZWaveCryptoException {
-        super(new BouncyCastleFipsProvider());
+    protected ZWaveCryptoProviderImpl() throws ZWaveCryptoException {
     }
 
-    @Override
     protected int computeAesCcmOutputSize(int plaintextLength, byte[] nonce, byte[] additionalAuthenticationData) {
+        // TODO: use JCA api w/provider
         // CCMParameters is deprecated
         AEADParameters params = new AEADParameters(DUMMY_AES_KEY_PARAMETER, AES_CCM_LENGTH_BITS, DUMMY_NONCE,
                 additionalAuthenticationData);
@@ -54,9 +53,9 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
         return cipher.getOutputSize(plaintextLength);
     }
 
-    @Override
     protected byte[] performAesCcmCrypt(boolean encrypt, byte[] inputBytes, byte[] keyBytes, byte[] nonce,
             byte[] additionalAuthenticationData) throws ZWaveCryptoException {
+        // TODO: use JCA api w/provider
         logger.debug("performAesCcm encrypt={} inputBytes={} keyBytes={} nonce={} aad={}", encrypt,
                 Arrays.toString(inputBytes), Arrays.toString(keyBytes), Arrays.toString(nonce),
                 Arrays.toString(additionalAuthenticationData));
@@ -84,22 +83,10 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
         }
     }
 
-    @Override
-    protected SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(SecureRandom entrophySource,
-            byte[] personalizationString, byte[] nonceBytes, boolean makePredictionResistant)
-            throws ZWaveCryptoException {
-        EntropySourceProvider entropySourceProvider = new BasicEntropySourceProvider(entrophySource, true);
-        return buildAesCounterModeDeterministicRandomNumberGenerator(entropySourceProvider, personalizationString,
-                nonceBytes, makePredictionResistant);
-    }
-
-    @Override
     protected SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entrophyBytes,
             byte[] personalizationString, byte[] nonceBytes, boolean makePredictionResistant)
             throws ZWaveCryptoException {
-        EntropySourceProvider entrophySourceProvider = new OurEntropySourceProvider(entrophyBytes);
-        return buildAesCounterModeDeterministicRandomNumberGenerator(entrophySourceProvider, personalizationString,
-                nonceBytes, makePredictionResistant);
+        throw new IllegalStateException("DRBG_CTR not supported on Java 8");
     }
 
     private SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(
@@ -115,63 +102,39 @@ class ZWaveCryptoBouncyCastleProvider extends ZWaveCryptoProviderJCEJava8 {
          *      No Security_strength
          */
         // @formatter:on
+
         boolean useReseedingCounter = false;
         FipsDRBG.Builder fipsDRBGBuilder = FipsDRBG.CTR_AES_128.fromEntropySource(entrophySourceProvider)
                 .setPersonalizationString(personalizationString);
         return fipsDRBGBuilder.build(nonceBytes, useReseedingCounter);
     }
 
-    @Override
-    protected SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator() throws ZWaveCryptoException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    private static class OurEntropySourceProvider implements EntropySourceProvider {
-        private final int entrophyBitsAvailable;
-        private final byte[] entrophyBytes;
-
-        private OurEntropySourceProvider(byte[] entrophyBytes) {
-            this.entrophyBytes = entrophyBytes;
-            this.entrophyBitsAvailable = entrophyBytes.length * 8;
-        }
-
-        @Override
-        public EntropySource get(int entrophyBitsRequested) {
-            if (entrophyBitsRequested > entrophyBitsAvailable) {
-                logger.warn("OurEntropySourceProvider.get called with entrophyBitsRequested={} but we only have {}",
-                        entrophyBitsRequested, entrophyBitsAvailable);
-            } else {
-                logger.debug("OurEntropySourceProvider.get called with entrophyBitsRequested={}, available={}",
-                        entrophyBitsRequested, entrophyBitsAvailable);
-            }
-            return new OurEntropySource(entrophyBytes);
+    public static void main(String[] args) {
+        try {
+            byte[] nonceBytes = new byte[0];
+            ZWaveCryptoBouncyCastleProvider provider = new ZWaveCryptoBouncyCastleProvider();
+            final String eiStringHex = "34cbc2b217f3d907fa2ad6a0d7a813b0fda1e17fbeed94b0e0a0abfbec947146";
+            final byte[] eiBytes = hexStringToByteArray(eiStringHex);
+            // OurEntropySourceProvider entropySource = new OurEntropySourceProvider(eiBytes);
+            final byte[] personalizationString = "PersonalizationString".getBytes(StandardCharsets.US_ASCII);
+            SecureRandom drng = provider.buildAesCounterModeDeterministicRandomNumberGenerator((SecureRandom) null,
+                    personalizationString, nonceBytes, false);
+            final byte[] tofill = new byte[16];
+            drng.nextBytes(tofill);
+            System.out.println("Done " + Arrays.toString(tofill));
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
-    private static class OurEntropySource implements EntropySource {
-        private final byte[] entrophyBytes;
-
-        private OurEntropySource(byte[] entrophyBytes) {
-            this.entrophyBytes = entrophyBytes;
+    // TODO: delete
+    public static byte[] hexStringToByteArray(final String s) {
+        final int len = s.length();
+        final byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i + 1), 16));
         }
-
-        @Override
-        public int entropySize() {
-            // in bits
-            return entrophyBytes.length * 8;
-        }
-
-        @Override
-        public byte[] getEntropy() {
-            return entrophyBytes;
-        }
-
-        @Override
-        public boolean isPredictionResistant() {
-            return false;
-        }
-
+        return data;
     }
 
 }

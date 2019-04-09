@@ -61,14 +61,14 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClas
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
-import org.openhab.binding.zwave.internal.protocol.security.ZWaveCryptoException;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveProtocolViolationException;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2DskDigitInputMethod;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.DeleteReturnRouteMessageClass;
@@ -456,6 +456,7 @@ public class ZWaveNodeInitStageAdvancer {
 
         // Prefer SECURITY2 over SECURITY0
         if (security2CommandClass != null) {
+            security2CommandClass.setIsPairing(true);
             doSecureS2Stages(security2CommandClass);
         } else if (securityCommandClass != null) {
             doSecureS0Stages(securityCommandClass);
@@ -921,7 +922,18 @@ public class ZWaveNodeInitStageAdvancer {
 
                 // Step 20. B->A : Security 2 Network Key Get: Node B requests a specific Key from Node A
                 // see CC:009F.01.00.11.066
-                // TODO: generate the key?
+
+                // Step 22. Did we reply to NETWORK_KEY_GET with NETWORK_KEY_REPORT?
+                if (security2CommandClass
+                        .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_REPORT) == false) {
+                    security2TimeoutOccurred("E(NETWORK_KEY_REPORT)");
+                    node.setSecurityCommandClass(null);
+                    return;
+                }
+
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
 
                 // TOOD: send S2_MSG_ENCAP (KEX_REPORT, (echo=1, requested keys))
 
@@ -965,6 +977,7 @@ public class ZWaveNodeInitStageAdvancer {
     }
 
     private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass, ZWaveS2FailType failTypeParam) {
+        security2CommandClass.setIsPairing(false);
         node.setSecurityCommandClass(null);
         controller.notifyEventListeners(
                 new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));

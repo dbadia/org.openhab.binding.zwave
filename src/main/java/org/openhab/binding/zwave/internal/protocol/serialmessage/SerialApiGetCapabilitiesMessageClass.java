@@ -72,9 +72,9 @@ public class SerialApiGetCapabilitiesMessageClass extends ZWaveCommandProcessor 
                     SerialMessage.SerialMessageClass msgClass = SerialMessage.SerialMessageClass
                             .getMessageClass(((by - 8) << 3) + bi + 1);
                     if (msgClass == null) {
-                        logger.trace("Supports: Unknown Class {}", Integer.toHexString(((by - 8) << 3) + bi + 1));
+                        logger.debug("Supports: Unknown Class {}", Integer.toHexString(((by - 8) << 3) + bi + 1));
                     } else {
-                        logger.trace("Supports: {}", msgClass);
+                        logger.debug("Supports: {}", msgClass); // TODO: back to trace here and above
                         apiCapabilities.add(msgClass);
                     }
                 }
