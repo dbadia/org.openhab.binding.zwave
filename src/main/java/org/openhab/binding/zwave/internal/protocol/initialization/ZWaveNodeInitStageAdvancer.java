@@ -23,6 +23,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -363,6 +364,7 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
+        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.INIT_NEIGHBORS);
 
         // logger.debug("NODE {}: Node advancer: INIT_NEIGHBORS - send RoutingInfo", node.getNodeId());
@@ -393,6 +395,7 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
+        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.FAILED_CHECK);
         // processTransaction(new IsFailedNodeMessageClass().doRequest(node.getNodeId()));
         // if (initRunning == false) {
@@ -544,7 +547,7 @@ public class ZWaveNodeInitStageAdvancer {
         // We do three tries - if it doesn't respond, and we get the ACK from the device, then we assume the node wasn't
         // securely included
         logger.debug("NODE {}: SECURITY_INC State=SECURE_PING", node.getNodeId());
-        if (processTransaction(securityCommandClass.getSecurityNonceGet(), 0, 3) == false) {
+        if (processTransaction(securityCommandClass.buildSecurityNonceGet(), 0, 3) == false) {
             logger.info("NODE {}: SECURITY_INC State=FAILED, Reason=SECURE_PING", node.getNodeId());
             return;
         }
@@ -920,34 +923,61 @@ public class ZWaveNodeInitStageAdvancer {
                 // Section 3.1.6.1
                 // see CC:009F.01.00.11.065
 
-                // Step 20. B->A : Security 2 Network Key Get: Node B requests a specific Key from Node A
-                // see CC:009F.01.00.11.066
+                Iterator<ZWaveKeyType> grantedKeyIter = grantedKeysList.iterator();
+                while (grantedKeyIter.hasNext()) {
 
-                // Step 22. Did we reply to NETWORK_KEY_GET with NETWORK_KEY_REPORT?
-                if (security2CommandClass
-                        .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_REPORT) == false) {
-                    security2TimeoutOccurred("E(NETWORK_KEY_REPORT)");
+                    // Step 20. B->A : Security 2 Network Key Get: Node B requests a specific Key from Node A
+                    // see CC:009F.01.00.11.066
+                    ZWaveKeyType keyBeingGranted = grantedKeyIter.next();
+
+                    // Step 22. Did we reply to NETWORK_KEY_GET with NETWORK_KEY_REPORT?
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_REPORT) == false) {
+                        security2TimeoutOccurred("E(NETWORK_KEY_REPORT) " + keyBeingGranted);
+                        node.setSecurityCommandClass(null);
+                        return;
+                    }
+                    // Step 24. Node A and Node B are now in possession of a shared network key
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+
+                    // Step 25. B->A : Nonce Get
+                    // Step 26. A->B : Nonce Report
+                    if (security2CommandClass.waitForResponseToQueue(
+                            CommandClassSecurity2V1.SECURITY_2_COMMANDS_NONCE_REPORT) == false) {
+                        security2TimeoutOccurred("NONCE_GET " + keyBeingGranted);
+                        node.setSecurityCommandClass(null);
+                        return;
+                    }
+
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+
+                    // Step 27: B->A : Security 2 Network Key Verify
+                    // Step 28 and 29. A->B : Security 2 Transfer End:
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_TRANSFER_END) == false) {
+                        security2TimeoutOccurred("e(NETWORK_KEY_VERIFY) " + keyBeingGranted);
+                        node.setSecurityCommandClass(null);
+                        return;
+                    }
+
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+                    // Loop back up for each granted key
+                }
+                // All Keys have been requested.
+
+                // wait for Step 30. B->A : Security 2 Transfer End
+                if (security2CommandClass.waitForReceivedTransferEnd() == false) {
+                    security2TimeoutOccurred("e(TRANSFER_END)");
                     node.setSecurityCommandClass(null);
                     return;
                 }
 
-                if (shouldContinueS2Pairing(security2CommandClass) == false) {
-                    return;
-                }
-
-                // TOOD: send S2_MSG_ENCAP (KEX_REPORT, (echo=1, requested keys))
-
-                // Temporary SPAN established
-
-                // TODO: Loop for each granted key
-                // receive S2_MSG_ENCAP (NETWORK_KEY_GET (requested key))
-                // send S2_MSG_ENCAP (NETWORK_KEY_REPORT (granted key)) receive NONCE_GET
-                // send NONCE_REPORT(SOS=1, REI) receive S2_MSG_ENCAP (SPAN_EXT with SEI, Netowrk Key verify)
-                // send S2_MSG_ENCAP (TRANSFER_END (key verified=1, key req complete=0)) receive LOOP to top
-                // receive S2_MSG_ENCAP (TRANSFER_END (key verified=0, key req complete=1))
-
-                // TODO: after everything:
-                // Notify that KEX set completed ok
                 controller.notifyEventListeners(
                         new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeComplete, node.getNodeId()));
                 logger.error("NODE {}: SECURITY_2_INC State=COMPLETE", node.getNodeId());
@@ -964,7 +994,7 @@ public class ZWaveNodeInitStageAdvancer {
     private boolean shouldContinueS2Pairing(ZWaveSecurity2CommandClass security2CommandClass) {
         if (initRunning == false) {
             return false;
-        } else if (security2CommandClass.getContinueSecurePairing().get() == false) {
+        } else if (security2CommandClass.shouldContinueSecureInclusion().get() == false) {
             ZWaveProtocolViolationException protocolViolationException = security2CommandClass
                     .getProtocolViolationException();
             if (protocolViolationException != null && protocolViolationException.getFailType().isPresent()) {

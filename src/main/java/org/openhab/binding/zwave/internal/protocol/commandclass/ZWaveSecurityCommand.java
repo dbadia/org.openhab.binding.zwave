@@ -1,5 +1,6 @@
 package org.openhab.binding.zwave.internal.protocol.commandclass;
 
+import org.openhab.binding.zwave.internal.protocol.ZWaveMessagePayloadTransaction;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 
 /**
@@ -17,4 +18,10 @@ public interface ZWaveSecurityCommand { // TODO: rename to ZWaveSecurityCommandC
     public byte[] securelyEncapsulateTransaction(byte[] payload);
 
     public void setNetworkKeys(ZWaveSecurityNetworkKeys securityNetworkKeys);
+
+    public String getAbbreviation();
+
+    public boolean isNonceAvailable();
+
+    public ZWaveMessagePayloadTransaction buildSecurityNonceGet();
 }

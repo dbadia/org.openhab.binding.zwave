@@ -100,6 +100,8 @@ import com.thoughtworks.xstream.annotations.XStreamOmitField;
 public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWaveSecurityCommand {
     private static final int ENTROPHY_INPUT_SIZE = 16;
 
+    private static final long _60_SECONDS_MILLIS = TimeUnit.SECONDS.toMillis(60);
+
     private static final Random INSECURE_RANDOM = new Random();
 
     private static final Logger logger = LoggerFactory.getLogger(ZWaveSecurity2CommandClass.class);
@@ -215,10 +217,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * Flag that is periodically checked by {@link ZWaveNodeInitStageAdvancer} to see if secure pairing should continue
      */
     @XStreamOmitField
-    private AtomicBoolean continueSecurePairing = new AtomicBoolean(true);
+    private AtomicBoolean continueSecureInclusion = new AtomicBoolean(true);
 
     /**
-     * Used in conjunction with {@link #continueSecurePairing}. When continueSecurePairing == true,
+     * Used in conjunction with {@link #continueSecureInclusion}. When continueSecurePairing == true,
      * ZWaveNodeInitStageAdvancer must check this field to see if a FAIL command should be sent to the node
      */
     @XStreamOmitField
@@ -253,6 +255,19 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      */
     @XStreamOmitField
     private ZWaveSpanStorage spanStorage = new ZWaveSpanStorage();
+
+    /**
+     * The spec says if decryption fails, we should reset the SPAN. This field is used to ensure we do so only once,
+     * otherwise we will loop forever
+     */
+    @XStreamOmitField
+    private long timestampOfLastSentNonceReportDueToDecryptFailureMillis = 0;
+
+    /*
+     * has to be non-null by default so we can synchronize on it
+     */
+    @XStreamOmitField
+    private Long timestampOfReceivedTransferEnd = Long.valueOf(0);
 
     /**
      * Creates a new instance of the ZWaveSecurity2CommandClass class.
@@ -333,7 +348,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         } catch (ZWaveProtocolViolationException e) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=SPEC_VIOLATION {}", getNode().getNodeId(),
                     e.getMessage());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             protocolViolationException = e;
             return;
         }
@@ -341,7 +356,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // Echo bit must be false / 0
         if (echoBit) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_ECHO_1", getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
         synchronized (kexDataLock) {
@@ -349,6 +364,28 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             kexDataLock.notifyAll();
         }
         // ZWaveNodeInitStageAdvancer will decide which keys to grant and trigger a send of KEX_SET
+    }
+
+    /**
+     * Step 27. B->A : Security 2 Network Key Verify. See CC:009F.01.00.11.095
+     * Step 28. A5: Node A MUST verify that it can successfully decrypt the Key Verify command using the newly exchanged
+     * key. See CC:009F.01.00.11.06A
+     */
+    @SuppressWarnings("unchecked")
+    @ZWaveResponseHandler(id = CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_VERIFY, name = "SECURITY_2_NETWORK_KEY_VERIFY")
+    public void handleSecurity2NetworkKeyVerify(ZWaveCommandClassPayload payload, int endpoint) {
+        logger.debug("NODE {}: SECURITY_2_INC State=SECURITY_2_NETWORK_KEY_VERIFY", getNode().getNodeId());
+        // There is no payload for this command, successful decapsulation indicates success
+
+        /*
+         * Step 29. A->B : Security 2 Transfer End: If Node A is able to decrypt and verify the Key Verify command, it
+         * MUST respond with Security 2 Transfer End with the field “Key verified” set to ‘1’
+         */
+        ZWaveCommandClassTransactionPayload outgoingPayload = new ZWaveCommandClassTransactionPayloadBuilder(
+                getNode().getNodeId(), CommandClassSecurity2V1.buildTransferEnd(true))
+                        // We can't predict the expected response
+                        .withPriority(TransactionPriority.Immediate).build();
+        getController().enqueue(outgoingPayload);
     }
 
     private ZWaveKexData validateKexReport(Boolean csaBit, Boolean echoBit,
@@ -439,14 +476,14 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // temporary secure channel. see CC:009F.01.00.11.097
         if (getNode().getSecurityCommandClass() == null) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_NOT_SECURE", getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
 
         Boolean echoFlag = (Boolean) responseTable.get("ECHO");
         if (echoFlag == false) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_INVALID echo=0", getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
         Boolean requestCsaFlag = (Boolean) responseTable.get("CLIENT_SIDE_AUTHENTICATION");
@@ -456,7 +493,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             // Exactly one bit MUST be set to 1 CC:009F.01.06.11.010
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_INVALID mutliple kex schemes",
                     getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
 
@@ -466,7 +503,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             // Exactly one bit MUST be set to 1 CC:009F.01.06.11.011
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_INVALID mutliple ecdh profiles",
                     getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
 
@@ -478,7 +515,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         if (this.kexSetDataSentToNode.equalsIgnoreEcho(kexSetEchoedData) == false) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_SET_AUTH_ECHO_MISMATCH",
                     getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             protocolViolationException = new ZWaveProtocolViolationException("KEX_SET echo did not match transmission",
                     ZWaveS2FailType.KEX_FAIL_AUTH);
             return;
@@ -508,7 +545,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             // received command
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=SPEC_VIOLOATION INCLUDING_NODE bit was set to 1",
                     getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
 
@@ -517,7 +554,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         if (tempDeviceEcdhPublicKeyBytes[0] != 0 || tempDeviceEcdhPublicKeyBytes[1] != 0) {
             logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=DSK_BYTES_NOT_OBFUSCATED",
                     getNode().getNodeId());
-            continueSecurePairing.set(false);
+            continueSecureInclusion.set(false);
             return;
         }
 
@@ -576,8 +613,11 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // synchronized (lastNonceGetReceived) {
         // lastNonceGetReceived.notify();
         // }
-        boolean mpanOutOfSync = false;
-        boolean spanOutOfSync = true; // TODO: true until when, move to field?
+    }
+
+    private void buildAndSendNonceReport(boolean resetSpan) {
+        boolean mpanOutOfSync = !resetSpan;
+        boolean spanOutOfSync = resetSpan;
         if (lastReceiverEntropyInputSentToNode != null) {
             logger.warn("Overwriting old nonce data {}", Arrays.toString(lastReceiverEntropyInputSentToNode));
         }
@@ -596,7 +636,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                     CommandClassSecurity2V1.buildNonceReport(getAndIncrementOutboundSequenceNumber(), mpanOutOfSync,
                             spanOutOfSync, lastReceiverEntropyInputSentToNode))
                                     .withPriority(TransactionPriority.NonceResponse).build());
-            updateLastResponseQueuedAt(KEX_REPORT);
+            updateLastResponseQueuedAt(SECURITY_2_COMMANDS_NONCE_REPORT);
         } catch (IOException e) {
             logger.error("NODE {}: error building NONCE_REPORT", getNode().getNodeId(), e);
         }
@@ -640,8 +680,14 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                  */
                 byte[] newSenderEntropyInput = new byte[ENTROPHY_INPUT_SIZE];
                 cryptoOperations.fillFromPrng(newSenderEntropyInput);
-                SecureRandom newSpanGenerator = cryptoOperations.instantiateSpan(newSenderEntropyInput,
-                        receiverEntropyInput);
+                SecureRandom newSpanGenerator;
+                try {
+                    newSpanGenerator = cryptoOperations.instantiateSpan(newSenderEntropyInput, receiverEntropyInput);
+                } catch (ZWaveCryptoException e) {
+                    logger.error("NODE {}: error instantiating SPAN, cannot build encapsulated command",
+                            getNode().getNodeId(), e);
+                    return;
+                }
                 ZWaveKeyType keyInUse = ZWaveKeyType.S2_TEMP;
                 if (tempAesCcmKey == null) {
                     // Assume the strongest key is in use
@@ -667,7 +713,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     @ZWaveResponseHandler(id = CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_GET, name = "SECURITY_2_NETWORK_KEY_GET")
     public void handleKeyGet(ZWaveCommandClassPayload payload, int endpoint) {
         if (!performingSecureInclusion.get()) {
-            logger.error("NODE {}: received NETWORK_KEY_GET but not in secure pairing mode", getNode().getNodeId());
+            logger.error("NODE {}: received NETWORK_KEY_GET but not in secure inclusion mode", getNode().getNodeId());
             return;
         }
         Map<String, Object> response = CommandClassSecurity2V1.handleSecurity2KexGet(payload.getPayloadBuffer());
@@ -676,8 +722,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // CC:009F.01.09.11.007 This field is used to request a network key. Only one key MUST be requested at a
         // time, i.e. only 1 bit MUST be set to ‘1’. This field MUST be encoded according to Table 19
         if (requestedKeyTypeList.size() != 1) {
-            logger.error("NODE {}: NETWORK_KEY_GET wrong number of keys requested: {}", getNode().getNodeId(),
-                    requestedKeyTypeList.size());
+            logger.error(
+                    "NODE {}: SECURITY_2_INC State=FAILED, Reason=SPEC_VIOLATION NETWORK_KEY_GET wrong number of keys requested: {}",
+                    getNode().getNodeId(), requestedKeyTypeList.size());
+            continueSecureInclusion.set(false);
             return;
         }
         ZWaveKeyType keyType = requestedKeyTypeList.get(0);
@@ -686,16 +734,57 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // Reply with NETWORK_KEY_REPORT
         byte[] keyBytes = securityNetworkKeys.getKey(keyType).getEncoded();
         if (keyBytes.length != 16) {
-            logger.error("NODE {}: network key {} is wrong size: {}", getNode().getNodeId(), keyType, keyBytes.length);
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=SPEC_VIOLATION network key wrong size: {}",
+                    getNode().getNodeId(), keyBytes.length);
+            continueSecureInclusion.set(false);
             return;
         }
         // Set the key in use since we know which key to use for decryption of the next message
         this.pairingKeyInUse = keyType;
 
-        // Don't use withExpectedResponseCommand because the response can vary
+        // Don't call withExpectedResponseCommand because the response can vary
         getController().enqueue(new ZWaveCommandClassTransactionPayloadBuilder(getNode().getNodeId(),
                 CommandClassSecurity2V1.buildNetworkKeyReport(keyType, keyBytes))
                         .withPriority(TransactionPriority.Immediate).build());
+    }
+
+    /**
+     * Step 30. B->A : Security 2 Transfer End : When Node B has no more keys to request it MUST finish the secure setup
+     * by sending a Security 2 Transfer End command with the field “Key Request Complete” set to ‘1’. a. If this frame
+     * is received before all keys have been requested, the controller MUST consider the S2 Bootstrapping process
+     * failed. See CC:009F.01.00.11.06C
+     */
+    @SuppressWarnings("unchecked")
+    @ZWaveResponseHandler(id = CommandClassSecurity2V1.SECURITY_2_TRANSFER_END, name = "SECURITY_2_TRANSFER_END")
+    public void handleSecurity2TransferEnd(ZWaveCommandClassPayload payload, int endpoint) {
+        logger.debug("NODE {}: SECURITY_2_INC State=SECURITY_2_TRANSFER_END", getNode().getNodeId());
+        if (!performingSecureInclusion.get()) {
+            logger.error("NODE {}: received SECURITY_2_TRANSFER_END but not in secure inclusion mode",
+                    getNode().getNodeId());
+            return;
+        }
+        Map<String, Object> response = CommandClassSecurity2V1.handleTransferEnd(payload.getPayloadBuffer());
+
+        // key verified must be false / 0
+        if ((Boolean) response.get("KEY_VERIFIED")) {
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=TRANSFER_END__KEY_VERIFIED_1",
+                    getNode().getNodeId());
+            continueSecureInclusion.set(false);
+            return;
+        }
+
+        // key request complete must be true / 1
+        if ((Boolean) response.get("KEY_REQUEST_COMPLETE") == false) {
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=TRANSFER_END__KEY_REQUEST_COMPLETE_0",
+                    getNode().getNodeId());
+            continueSecureInclusion.set(false);
+            return;
+        }
+
+        synchronized (timestampOfReceivedTransferEnd) {
+            timestampOfReceivedTransferEnd = System.currentTimeMillis();
+            timestampOfReceivedTransferEnd.notify();
+        }
     }
 
     /**
@@ -736,7 +825,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                 } catch (ZWaveCryptoException e) {
                     logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_FAIL {}",
                             getNode().getNodeId(), e.getMessage(), e);
-                    ZWaveSecurity2CommandClass.this.continueSecurePairing.set(false);
+                    ZWaveSecurity2CommandClass.this.continueSecureInclusion.set(false);
                 }
             }
         });
@@ -764,24 +853,43 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     }
 
     public boolean waitForResponseToQueue(int expectedCommandClassSecurity2V1) {
-        boolean needToWait = (System.currentTimeMillis() - lastResponseQueuedAt) > TEN_SECONDS_MILLIS
-                || lastResponseQueuedCommandClass != expectedCommandClassSecurity2V1;
-
-        while (needToWait) {
-            try {
-                synchronized (lastResponseQueuedAt) {
+        synchronized (lastResponseQueuedAt) {
+            boolean wasResponseQueued = (System.currentTimeMillis() - lastResponseQueuedAt) < TEN_SECONDS_MILLIS
+                    && lastResponseQueuedCommandClass == expectedCommandClassSecurity2V1;
+            long stopAt = System.currentTimeMillis() + TEN_SECONDS_MILLIS;
+            while (wasResponseQueued == false && System.currentTimeMillis() < stopAt) {
+                try {
                     lastResponseQueuedAt.wait(TEN_SECONDS_MILLIS);
+                } catch (InterruptedException e) {
+                    // Per Java Concurrency In Practice, Brian Gotez TODO: are we sure?
+                    Thread.currentThread().interrupt();
                 }
-            } catch (InterruptedException e) {
-                // Per Java Concurrency In Practice, Brian Gotez TODO: are we sure?
-                Thread.currentThread().interrupt();
+                wasResponseQueued = (System.currentTimeMillis() - lastResponseQueuedAt) < TEN_SECONDS_MILLIS
+                        && lastResponseQueuedCommandClass == expectedCommandClassSecurity2V1;
             }
+            logger.debug("NODE {}: Returning wasResponseQueued={} for {}", getNode().getNodeId(), wasResponseQueued,
+                    SerialMessage.b2hex((byte) expectedCommandClassSecurity2V1));
+            return wasResponseQueued;
         }
-        boolean wasResponseQueued = (System.currentTimeMillis() - lastResponseQueuedAt) < TEN_SECONDS_MILLIS
-                && lastResponseQueuedCommandClass == expectedCommandClassSecurity2V1;
-        logger.debug("Returning wasResponseQueued={} for {}", wasResponseQueued,
-                SerialMessage.b2hex((byte) expectedCommandClassSecurity2V1));
-        return wasResponseQueued;
+    }
+
+    public boolean waitForTransferEndWithCompleteFlag(int expectedCommandClassSecurity2V1) {
+        synchronized (timestampOfReceivedTransferEnd) {
+            boolean wasMessageReceived = (System.currentTimeMillis()
+                    - timestampOfReceivedTransferEnd) < TEN_SECONDS_MILLIS;
+            long stopAt = System.currentTimeMillis() + TEN_SECONDS_MILLIS;
+            while (wasMessageReceived == false && System.currentTimeMillis() < stopAt) {
+                try {
+                    timestampOfReceivedTransferEnd.wait(TEN_SECONDS_MILLIS);
+                } catch (InterruptedException e) {
+                    // Per Java Concurrency In Practice, Brian Gotez TODO: are we sure?
+                    Thread.currentThread().interrupt();
+                }
+                wasMessageReceived = (System.currentTimeMillis() - timestampOfReceivedTransferEnd) < TEN_SECONDS_MILLIS;
+            }
+            logger.debug("NODE {}: Returning wasTransferEndReceived={}", getNode().getNodeId(), wasMessageReceived);
+            return wasMessageReceived;
+        }
     }
 
     /**
@@ -799,7 +907,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * @return the AAD data
      * @throws IOException
      */
-    private byte[] generateCcmAadData(int senderNodeId, int destinationTag, short messageLength, int sequenceNumber,
+    private byte[] generateCcmAeadData(int senderNodeId, int destinationTag, short messageLength, int sequenceNumber,
             boolean hasExtension, boolean hasEncryptedExtension, byte[] extensionData) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(30);
         // CC:009F.01.00.11.009 The following data structure MUST be used as AAD input for each CCM operation.
@@ -859,13 +967,50 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         return securelyEncapsulateTransaction(payload, Collections.emptyMap());
     }
 
+    @Override
+    public boolean isNonceAvailable() {
+        return spanStorage.doesGeneratorExist(Direction.OUTBOUND, determineKeyTypeInUse());
+    }
+
+    @Override
+    public ZWaveMessagePayloadTransaction buildSecurityNonceGet() {
+        ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
+                getNode().getNodeId(), CommandClassSecurity2V1.buildNonceGet())
+                        .withExpectedResponseCommand(CommandClassSecurity2V1.SECURITY_2_COMMANDS_NONCE_REPORT)
+                        .withPriority(TransactionPriority.Immediate).build();
+        return payload;
+    }
+
+    private ZWaveKeyType determineKeyTypeInUse() {
+        ZWaveKeyType keyTypeInUse = ZWaveKeyType.S2_TEMP;
+        if (tempAesCcmKey == null) {
+            keyTypeInUse = grantedKeysList.get(0);
+        }
+        return keyTypeInUse;
+    }
+
     private byte[] securelyEncapsulateTransaction(byte[] payload,
             Map<ZWaveS2EncapsulationExtensionType, byte[]> extensionToDataTable) {
         logger.debug("Creating command message SECURITY_2_MESSAGE_ENCAPSULATION version 1");
 
         if (!performingSecureInclusion.get()) {
             // Store a copy of the message in case the node can't decrypt and we need to resend
+            // OR we don't have a SPAN
             this.lastMessageEncapsulated = payload;
+        }
+
+        /*
+         * Before we start gathering data to encrypt, make sure we have a SPAN
+         */
+        ZWaveKeyType keyTypeInUse = ZWaveKeyType.S2_TEMP;
+        if (tempAesCcmKey == null) {
+            keyTypeInUse = grantedKeysList.get(0);
+        }
+        if (spanStorage.doesGeneratorExist(Direction.OUTBOUND, keyTypeInUse) == false) {
+            // ZWaveTransactionManager checked this before invoking this method, fail
+            logger.error("NODE {}: SPAN outbound generator does not exist, abort S2 message security encap",
+                    getNode().getNodeId());
+            return null;
         }
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -901,20 +1046,14 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             dataToEncrypt.write(buildExtensionBuffer(encryptedExtensionList, extensionToDataTable));
             dataToEncrypt.write(payload);
 
-            byte[] nonce = new byte[ENTROPHY_INPUT_SIZE];
-            ZWaveKeyType keyTypeInUse = ZWaveKeyType.S2_TEMP;
-            if (tempAesCcmKey == null) {
-                keyTypeInUse = grantedKeysList.get(0);
-            }
-            spanTable.get(keyTypeInUse).nextBytes(nonce);
-
+            byte[] nonce = spanStorage.getNextNonce(Direction.OUTBOUND, keyTypeInUse);
             /*
              * Build the AAD - note that unlike typical AEAD crypto structures, the AAD is NOT included in the structure
              * for ZWave.
              * Instead, the AAD is computed by each side independently. See 3.6.4.4 AES-128 CCM Encryption and
              * Authentication
              */
-            byte[] tempAad = generateCcmAadData(controllerNodeId, getNode().getNodeId(), (short) 0, sequenceNumber,
+            byte[] tempAad = generateCcmAeadData(controllerNodeId, getNode().getNodeId(), (short) 0, sequenceNumber,
                     hasUnencryptedExtension, hasEncryptedExtension, unencryptedExtensionBuffer);
             // Before we can build the real AAD, we need to compute the message length, which requires the AAD
             int ciphertextLength = cryptoOperations.computeAesCcmOutputSize(dataToEncrypt.size(), nonce, tempAad);
@@ -928,8 +1067,11 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             if (tempAesCcmKey == null) {
                 return cryptoOperations.encryptWithAesCcm(dataToEncrypt.toByteArray(), tempAesCcmKey, nonce, aad);
             } else {
-                SecretKey strongestKeyGranted = securityNetworkKeys.getKey(grantedKeysList.get(0));
-                return cryptoOperations.encryptWithAesCcm(dataToEncrypt.toByteArray(), strongestKeyGranted, nonce, aad);
+                SecretKey strongestKeyGranted = securityNetworkKeys.getKey(keyTypeInUse);
+                byte[] cipherBytes = cryptoOperations.encryptWithAesCcm(dataToEncrypt.toByteArray(),
+                        strongestKeyGranted, nonce, aad);
+                outputData.write(cipherBytes);
+                return outputData.toByteArray();
             }
         } catch (ZWaveCryptoException | IOException e) {
             logger.error("NODE {}: Error encapsulating security message with COMMAND_CLASS_SECURITY_2",
@@ -976,11 +1118,14 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         byte[] cipherBytes = (byte[]) response.get("ENCRYPTED_BYTES");
 
         byte[] aad = null;
-        byte[] nonce = null;
 
         ZWaveKeyType keyForDecryption = pairingKeyInUse;
         if (!performingSecureInclusion.get()) {
-            keyForDecryption = grantedKeysList.get(0); // Nodes should use the most secure key?
+            /*
+             * There is no identifier in the payload to state which key was used for encryption. If the node was granted
+             * multiple keys, how do we know which key to use for decryption? Assume most secure key?
+             */
+            keyForDecryption = grantedKeysList.get(0);
         }
         try {
             if (senderEntrophyInput != null) {
@@ -1010,51 +1155,85 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                 SecureRandom inboundSpanGenerator = cryptoOperations.instantiateSpan(senderEntrophyInput,
                         lastReceiverEntropyInputSentToNode);
                 spanStorage.updateGenerator(keyForDecryption, inboundSpanGenerator, Direction.INBOUND);
-                lastReceiverEntropyInputSentToNode = null; // Clear out lastNoneGenerated since we used the data to
-                                                           // build the SPAN
+                // Clear the REI since we used the data to build the SPAN
+                lastReceiverEntropyInputSentToNode = null;
             }
             // Decrypt the ciphertext using AES CCM
             int destinationTag = controllerNodeId; // Singlecast frame is all we support, so the Receiver NodeID which
                                                    // is that of the controller
             int messageLength = payloadBuffer.length;
-            aad = generateCcmAadData(getNode().getNodeId(), destinationTag, (short) messageLength, sequenceNumber,
+            aad = generateCcmAeadData(getNode().getNodeId(), destinationTag, (short) messageLength, sequenceNumber,
                     hasExtension, hasEncryptedExtension, nonEncryptedExtensionBytes);
-            nonce = new byte[ENTROPHY_INPUT_SIZE];
-            inboundSpan.nextBytes(nonce);
+
         } catch (ZWaveCryptoException | IOException e) {
-            logger.error("NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2",
-                    getNode().getNodeId(), e);
-            logger.error(
-                    "NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2: error generating nonce from inboundSpan",
-                    getNode().getNodeId(), e);
-            return null; // fail silently since this is not in Table 11, Security 2 bootstrapping
-        }
-        // tempAesCcmKey will be null when permanent keys are in use
-        try {
-            if (tempAesCcmKey == null) {
-                return cryptoOperations.decryptWithAesCcm(cipherBytes, tempAesCcmKey, nonce, aad);
+            if (performingSecureInclusion.get()) {
+                // Don't send nonce report during secure inclusion since we just created the SPAN
+                continueSecureInclusion.set(false); // TODO: anything else?
+                logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=SPAN_BUILD_FAILED", getNode().getNodeId());
+                // fail silently since this is not in Table 11, Security 2 bootstrapping
+                return null;
             } else {
-                return cryptoOperations.decryptWithAesCcm(cipherBytes, keyForDecryption, nonce, aad);
+                logger.error(
+                        "NODE {}: Error decapsulating security message with COMMAND_CLASS_SECURITY_2: error building SPAN from SEI",
+                        getNode().getNodeId(), e);
+                return null;
             }
-        } catch (ZWaveCryptoException e) {
-            logger.error("NODE: {} decryption attempt with key {} failed because of {}", getNode().getNodeId(),
-                    keyForDecryption, e.getMessage());
-            if (!performingSecureInclusion.get()) {
-                logger.debug("NODE: {} resetting SPAN after decryption failure, sending NonceReport",
-                        getNode().getNodeId());
-                // TODO: do it, send none report and reset span
-                // TODO: give up at some point?
+        }
+
+        /*
+         * Attempt to decrypt the message with the current nonce. If that fails, try other nonces
+         *
+         * CC:009F.01.00.12.003 If the Receiver is unable to authenticate the singlecast message with the current
+         * SPAN, the Receiver SHOULD try decrypting the message with one or more of the following SPAN values,
+         * stopping when decryption is successful or the maximum number of iterations is reached. The maximum number
+         * of iterations performed by a receiving node MUST be in the range 1..5.
+         */
+
+        for (int i = 0; i < 5; i++) {
+            try {
+                byte[] nonce = spanStorage.getNextNonce(Direction.INBOUND, keyForDecryption);
+                if (tempAesCcmKey == null) { // tempAesCcmKey will be null when permanent keys are in use
+                    return cryptoOperations.decryptWithAesCcm(cipherBytes, keyForDecryption, nonce, aad);
+                } else {
+                    return cryptoOperations.decryptWithAesCcm(cipherBytes, tempAesCcmKey, nonce, aad);
+                }
+            } catch (ZWaveCryptoException e) {
+                logger.debug(
+                        "NODE: {} decryption attempt with key {} and nonce #{} failed because of {}, trying next nonce",
+                        getNode().getNodeId(), keyForDecryption, i, e.getMessage());
             }
+        }
+
+        if (performingSecureInclusion.get()) {
+            // Don't send nonce report during secure inclusion since we just created the SPAN
+            continueSecureInclusion.set(false); // TODO: anything else?
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=DECRYPT_ERROR ", getNode().getNodeId());
+            return null;
+        } else if (timestampOfLastSentNonceReportDueToDecryptFailureMillis + _60_SECONDS_MILLIS > System
+                .currentTimeMillis()) {
+            // If decryption fails, send the Nonce report once, but only once. The spec isn't clear on this, but if the
+            // first reset doesn't work, chances are others won't either
+            logger.error("NODE: {} decryption with key {} failed multiple times and after SPAN reset.  Giving up",
+                    getNode().getNodeId(), keyForDecryption);
             return null;
         }
+        /*
+         * CC:009F.01.00.11.01D If the maximum number of iterations is reached without successful decryption, a
+         * Nonce Report MUST be sent to the Sender with the SOS flag set and containing a new REI. At the same time,
+         * the Receiver MUST invalidate the SPAN table entry for the Sender NodeID.
+         */
+        logger.debug("NODE: {} resetting SPAN after decryption failure, sending NonceReport", getNode().getNodeId());
+        buildAndSendNonceReport(true);
+        timestampOfLastSentNonceReportDueToDecryptFailureMillis = System.currentTimeMillis();
+        return null;
     }
 
     public static boolean doesCommandRequireSecurityEncapsulation(int commandKey) {
         return SECURITY_REQUIRED_COMMANDS.contains(commandKey);
     }
 
-    public AtomicBoolean getContinueSecurePairing() {
-        return continueSecurePairing;
+    public AtomicBoolean shouldContinueSecureInclusion() {
+        return continueSecureInclusion;
     }
 
     public ZWaveProtocolViolationException getProtocolViolationException() {
@@ -1162,5 +1341,10 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             stringBytes[i + T2Length] = (byte) (T3Bytes[i] & 0xFF);
         }
         this.tempPersonalizationString = stringBytes;
+    }
+
+    @Override
+    public String getAbbreviation() {
+        return "S2";
     }
 }

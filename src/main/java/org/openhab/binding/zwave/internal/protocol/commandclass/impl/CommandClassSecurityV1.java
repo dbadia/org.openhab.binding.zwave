@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,7 +128,7 @@ public class CommandClassSecurityV1 {
      * Security Commands Supported Report<br>
      *
      *
-     * @param reportsToFollow {@link Integer}
+     * @param reportsToFollow     {@link Integer}
      * @param commandClassSupport {@link List<Integer>}
      * @param commandClassControl {@link List<Integer>}
      * @return the {@link byte[]} array with the command to send
@@ -548,12 +549,12 @@ public class CommandClassSecurityV1 {
      * Security Message Encapsulation<br>
      *
      *
-     * @param initializationVectorByte {@link byte[]}
-     * @param sequenceCounter {@link Integer}
-     * @param sequenced {@link Boolean}
-     * @param secondFrame {@link Boolean}
-     * @param commandByte {@link byte[]}
-     * @param receiversNonceIdentifier {@link Integer}
+     * @param initializationVectorByte      {@link byte[]}
+     * @param sequenceCounter               {@link Integer}
+     * @param sequenced                     {@link Boolean}
+     * @param secondFrame                   {@link Boolean}
+     * @param commandByte                   {@link byte[]}
+     * @param receiversNonceIdentifier      {@link Integer}
      * @param messageAuthenticationCodeByte {@link byte[]}
      * @return the {@link byte[]} array with the command to send
      */
@@ -670,12 +671,12 @@ public class CommandClassSecurityV1 {
      * Security Message Encapsulation Nonce Get<br>
      *
      *
-     * @param initializationVectorByte {@link byte[]}
-     * @param sequenceCounter {@link Integer}
-     * @param sequenced {@link Boolean}
-     * @param secondFrame {@link Boolean}
-     * @param commandByte {@link byte[]}
-     * @param receiversNonceIdentifier {@link Integer}
+     * @param initializationVectorByte      {@link byte[]}
+     * @param sequenceCounter               {@link Integer}
+     * @param sequenced                     {@link Boolean}
+     * @param secondFrame                   {@link Boolean}
+     * @param commandByte                   {@link byte[]}
+     * @param receiversNonceIdentifier      {@link Integer}
      * @param messageAuthenticationCodeByte {@link byte[]}
      * @return the {@link byte[]} array with the command to send
      */

@@ -58,8 +58,9 @@ public class CommandClassSecurity2V1 {
     public final static int SECURITY_2_NETWORK_KEY_GET = 0x09;
     public final static int SECURITY_2_NETWORK_KEY_REPORT = 0x0A;
     public final static int SECURITY_2_NETWORK_KEY_VERIFY = 0x0B;
+    public static final int SECURITY_2_TRANSFER_END = 0x0C;
 
-    private final static Map<Class<? extends Enum>, Map<Integer, ZWaveS2BitmaskEnumType>> ENUM_LOOKUP_TABLE_CACHE = new ConcurrentHashMap<>();
+    private final static Map<Class<? extends Enum>, Map<Integer, ZWaveS2BitmaskEnumType>> ENUM_LOOKUP_CACHE_TABLE = new ConcurrentHashMap<>();
 
     public static byte[] buildKexGet() {
         logger.debug("Creating command message KEX_GET version 1");
@@ -214,6 +215,16 @@ public class CommandClassSecurity2V1 {
         return outputData.toByteArray();
     }
 
+    public static byte[] buildNonceGet() {
+        logger.debug("Creating command message NONCE_GET version 1");
+
+        ByteArrayOutputStream outputData = new ByteArrayOutputStream();
+        outputData.write(COMMAND_CLASS_KEY);
+        outputData.write(SECURITY_2_COMMANDS_NONCE_GET);
+
+        return outputData.toByteArray();
+    }
+
     public static Map<String, Object> handleNonceGet(byte[] payload) {
         logger.debug("Parsing NONCE_GET");
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
@@ -308,6 +319,46 @@ public class CommandClassSecurity2V1 {
 
         outputData.write(failType.toByte());
         return outputData.toByteArray();
+    }
+
+    /**
+     * Step 29. A->B : Security 2 Transfer End: If Node A is able to decrypt and verify the Key Verify command, it MUST
+     * respond with Security 2 Transfer End with the field “Key verified” set to ‘1’. See CC:009F.01.00.11.06B
+     */
+    public static byte[] buildTransferEnd(boolean keyVerifiedFlag) {
+        logger.debug("Creating command message SECURITY_2_TRANSFER_END version 1");
+
+        ByteArrayOutputStream outputData = new ByteArrayOutputStream();
+        outputData.write(COMMAND_CLASS_KEY);
+        outputData.write(SECURITY_2_TRANSFER_END);
+
+        // bitmask (1 byte)
+        BitSet bitmask = new BitSet(8); // All zeros - all off
+
+        // Leave bit [0] set to off:
+        // This flag MUST be set to ‘0’ in all other cases CC:009F.01.0C.11.007
+
+        // Key verified flag [1]
+        if (keyVerifiedFlag) {
+            bitmask.set(1);
+        }
+
+        // Reserved [2-7]
+        // This field MUST be set to 0 by a sending node and MUST be ignored by a receiving node. CC:009F.01.0C.11.003
+
+        writeBitmask(bitmask, outputData);
+        return outputData.toByteArray();
+    }
+
+    public static Map<String, Object> handleTransferEnd(byte[] payload) {
+        logger.debug("Parsing SECURITY_2_TRANSFER_END");
+        Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
+
+        byte bitmask = (byte) (payload[0] & 0xFF);
+        responseTable.put("KEY_REQUEST_COMPLETE", Boolean.valueOf((bitmask & 0x0) == 1));
+        responseTable.put("KEY_VERIFIED", Boolean.valueOf((bitmask & 0x1) == 1));
+
+        return responseTable;
     }
 
     public static Map<String, Object> handleSecurity2DecapsulationUnencyptedPortions(byte[] payload) {
@@ -432,7 +483,7 @@ public class CommandClassSecurity2V1 {
     private static <E extends Enum<E>, B extends ZWaveS2BitmaskEnumType> List<B> parseBitMask(byte toParse,
             Class<E> enumClass, Class<B> enumClassAsBitmask) {
         BitSet bitSet = BitSet.valueOf(new byte[] { toParse });
-        Map<Integer, ZWaveS2BitmaskEnumType> bitMaskLookupTable = ENUM_LOOKUP_TABLE_CACHE.get(enumClass);
+        Map<Integer, ZWaveS2BitmaskEnumType> bitMaskLookupTable = ENUM_LOOKUP_CACHE_TABLE.get(enumClass);
         if (bitMaskLookupTable == null) {
             // Not cached, build the table
             bitMaskLookupTable = new ConcurrentHashMap<>();
@@ -445,7 +496,7 @@ public class CommandClassSecurity2V1 {
                             "Programmatic error, " + enumVal + " does not implement ZWaveSecurity2BitmaskEnumType");
                 }
             }
-            ENUM_LOOKUP_TABLE_CACHE.put(enumClass, bitMaskLookupTable);
+            ENUM_LOOKUP_CACHE_TABLE.put(enumClass, bitMaskLookupTable);
         }
         // Parse the byte into it's corresponding enum bits
         List<B> parsedList = new ArrayList<>();

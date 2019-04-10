@@ -246,7 +246,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
         }
     }
 
-    public ZWaveCommandClassTransactionPayload getSecurityNonceGet() {
+    @Override
+    public ZWaveCommandClassTransactionPayload buildSecurityNonceGet() {
         return new ZWaveCommandClassTransactionPayloadBuilder(getNode().getNodeId(),
                 CommandClassSecurityV1.getSecurityNonceGet())
                         .withExpectedResponseCommand(CommandClassSecurityV1.SECURITY_NONCE_REPORT)
@@ -476,6 +477,7 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
         return SECURITY_REQUIRED_COMMANDS.contains(commandKey);
     }
 
+    @Override
     public boolean isNonceAvailable() {
         if (theirNonce == null) {
             logger.debug("NODE {}: isNonceAvailable = null", getNode().getNodeId());
@@ -579,4 +581,8 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
         return keyBytes;
     }
 
+    @Override
+    public String getAbbreviation() {
+        return "S0";
+    }
 }

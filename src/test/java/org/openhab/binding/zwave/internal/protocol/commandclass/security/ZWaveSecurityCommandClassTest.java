@@ -88,7 +88,7 @@ public class ZWaveSecurityCommandClassTest {
         // TODO: securityTx.setNetworkKey(TEST_KEY);
 
         // Create the nonce request in the transmit node, and send it to the receive node
-        ZWaveCommandClassTransactionPayload nonceGet = securityTx.getSecurityNonceGet();
+        ZWaveCommandClassTransactionPayload nonceGet = securityTx.buildSecurityNonceGet();
         securityRx.handleSecurityNonceGet(nonceGet, 0);
 
         // We should have captured the nonce report
