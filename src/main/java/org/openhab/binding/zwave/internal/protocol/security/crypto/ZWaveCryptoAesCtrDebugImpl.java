@@ -14,14 +14,16 @@ import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZW
 public class ZWaveCryptoAesCtrDebugImpl implements ZWaveCryptoAesCtrDebug {
 
     protected ZWaveCryptoAesCtrDebugImpl() {
-        throw new UnsupportedOperationException("Java 8 does not support AES CTR_DBRG");
+        throw new UnsupportedOperationException(
+                "Must run on Java 9 or higher since Java 8 does not support AES CTR_DBRG");
     }
 
     @Override
     public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entrophyBytes,
             byte[] personalizationString, byte[] nonceBytes, boolean makePredictionResistant)
             throws ZWaveCryptoException {
-        throw new UnsupportedOperationException("Java 8 does not support AES CTR_DBRG");
+        throw new UnsupportedOperationException(
+                "Must run on Java 9 or higher since Java 8 does not support AES CTR_DBRG");
     }
 
 }

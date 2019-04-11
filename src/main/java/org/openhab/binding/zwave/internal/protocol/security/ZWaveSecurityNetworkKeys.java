@@ -1,7 +1,6 @@
 package org.openhab.binding.zwave.internal.protocol.security;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,14 +23,14 @@ public class ZWaveSecurityNetworkKeys {
     private Map<ZWaveKeyType, SecretKey> keyTable = new ConcurrentHashMap<>();
 
     public ZWaveSecurityNetworkKeys() {
-        this.keysToGenerate = Arrays.asList(ZWaveKeyType.values());
+        this.keysToGenerate = ZWaveKeyType.valuesWeakestToStrongest(false);
     }
 
     public void addKey(ZWaveKeyType keyType, SecretKey key) {
         if (keyTable.containsKey(keyType)) {
             throw new IllegalStateException("Netowrk kek " + keyType + " already exists in key table");
         }
-        if (keysToGenerate.remove(keyType)) {
+        if (keysToGenerate.remove(keyType) == false) {
             throw new IllegalStateException("Programmatic error - Tried to remove networkKeyType " + keyType
                     + " but it wasn't in keysToGenerate");
         }

@@ -151,9 +151,9 @@ public ZWaveControllerHandler(@NonNull Bridge bridge) {
 
         // Network security keys
         networkSecurityKeys = new ZWaveSecurityNetworkKeys();
-        String networkKeyHex = null;
-        for (ZWaveKeyType networkKeyType : ZWaveKeyType.values()) {
-            param = getConfig().get(CONFIGURATION_NETWORKKEY);
+        for (ZWaveKeyType networkKeyType : ZWaveKeyType.valuesWeakestToStrongest(false)) {
+            String networkKeyHex = null;
+            param = getConfig().get(networkKeyType.getControllerConstantName());
             if (param instanceof String) {
                 networkKeyHex = (String) param;
             }

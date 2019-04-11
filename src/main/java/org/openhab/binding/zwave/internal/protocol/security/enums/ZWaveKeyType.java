@@ -25,7 +25,6 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
     S0(7, "S0 Secure legacy devices", 4, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, false, false);
 
     private static List<ZWaveKeyType> keyTypesFromWeakestToStrongestCache = null;
-    private String toStringString;
     private int bitPosition;
     /**
      * CC:009F.01.05.11.015
@@ -43,7 +42,6 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
     private ZWaveKeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
             boolean requiresDskConfirmation, boolean requiredToSupportCsaIfRequestedByNode) {
         this.bitPosition = bitPosition;
-        this.toStringString = description + " " + super.toString();
         this.securityLevel = securityLevel;
         this.controllerConstantName = controllerConstantName;
         this.requiresDskConfirmation = requiresDskConfirmation;
@@ -92,11 +90,6 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
         return bitPosition;
     }
 
-    @Override
-    public String toString() {
-        return toStringString;
-    }
-
     public boolean isRequiredToSupportCsaWhenRequestedByNode() {
         return requiredToSupportCsaWhenRequestedByNode;
     }
@@ -111,5 +104,4 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
     public String getControllerConstantName() {
         return controllerConstantName;
     }
-
 }
