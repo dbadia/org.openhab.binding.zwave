@@ -46,14 +46,16 @@ public class CommandClassSecurity2V1 {
      */
     public final static int COMMAND_CLASS_KEY = ZWaveCommandClass.CommandClass.COMMAND_CLASS_SECURITY_2.getKey();
 
-    // TODO: document these if we don't auto generate
-    public final static int SECURITY_2_COMMANDS_NONCE_GET = 0x01; // TODO: SECURITY_2_NONCE_GET match spec
-    public final static int SECURITY_2_COMMANDS_NONCE_REPORT = 0x02; // TODO: SECURITY_2_NETWORK_KEY_REPORT
-    public static final int SECURITY_2_MESSAGE_ENCAPSULATION = 0x03; // TODO: COMMAND not message
+    /*
+     * Command names match SDS13740-1
+     */
+    public final static int SECURITY_2_NONCE_GET = 0x01;
+    public final static int SECURITY_2_NONCE_REPORT = 0x02;
+    public static final int SECURITY_2_MESSAGE_ENCAPSULATION = 0x03;
     public final static int KEX_GET = 0x04;
     public final static int KEX_REPORT = 0x05;
     public final static int KEX_SET = 0x06;
-    public final static int SECURITY_2_KEX_FAIL = 0x07;
+    public final static int KEX_FAIL = 0x07;
     public final static int PUBLIC_KEY_REPORT = 0x08;
     public final static int SECURITY_2_NETWORK_KEY_GET = 0x09;
     public final static int SECURITY_2_NETWORK_KEY_REPORT = 0x0A;
@@ -220,7 +222,7 @@ public class CommandClassSecurity2V1 {
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
-        outputData.write(SECURITY_2_COMMANDS_NONCE_GET);
+        outputData.write(SECURITY_2_NONCE_GET);
 
         return outputData.toByteArray();
     }
@@ -241,7 +243,7 @@ public class CommandClassSecurity2V1 {
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
-        outputData.write(SECURITY_2_COMMANDS_NONCE_REPORT);
+        outputData.write(SECURITY_2_NONCE_REPORT);
 
         // Sequence Number (1 byte)
         outputData.write(sequenceNumber);
@@ -315,7 +317,7 @@ public class CommandClassSecurity2V1 {
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
-        outputData.write(SECURITY_2_KEX_FAIL);
+        outputData.write(KEX_FAIL);
 
         outputData.write(failType.toByte());
         return outputData.toByteArray();

@@ -46,7 +46,7 @@ import com.thoughtworks.xstream.annotations.XStreamOmitField;
  * @author Chris Jackson
  */
 @XStreamAlias("COMMAND_CLASS_SECURITY")
-public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWaveSecurityCommand {
+public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWaveSecurityCommandClass {
     @XStreamOmitField
     private static final Logger logger = LoggerFactory.getLogger(ZWaveSecurity0CommandClass.class);
 

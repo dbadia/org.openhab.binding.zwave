@@ -36,7 +36,7 @@ import org.openhab.binding.zwave.internal.protocol.SerialMessage.SerialMessageTy
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionPriority;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionState;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransactionResponse.State;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.ZWaveCommandProcessor;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveTransactionMessageBuilder;
@@ -842,10 +842,10 @@ public class ZWaveTransactionManager {
 
             SerialMessage serialMessage = null;
             ZWaveNode node = controller.getNode(transaction.getNodeId());
-            ZWaveSecurityCommand securityEncapsulationCommand = null; // Will be set if security is needed
+            ZWaveSecurityCommandClass securityEncapsulationCommand = null; // Will be set if security is needed
 
             if (transaction.getRequiresSecurity()) {
-                ZWaveSecurityCommand securityCommandClass = node.getSecurityCommandClass();
+                ZWaveSecurityCommandClass securityCommandClass = node.getSecurityCommandClass();
                 if (securityCommandClass == null) {
                     logger.error(
                             "NODE {}: transaction required security but COMMAND_CLASS_SECURITY and COMMAND_CLASS_SECURITY_2 were not found.",

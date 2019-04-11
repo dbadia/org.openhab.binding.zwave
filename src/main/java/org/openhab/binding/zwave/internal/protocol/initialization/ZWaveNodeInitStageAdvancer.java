@@ -866,8 +866,8 @@ public class ZWaveNodeInitStageAdvancer {
 
                 // Step 14. A->B : Nonce Report : A’s Nonce
                 if (security2CommandClass
-                        .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_COMMANDS_NONCE_REPORT) == false) {
-                    // TODO: remove
+                        .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
+                    // TODO: LOW remove
                     logger.error("============== DAVE is the waitForResponseToQueue logic working?");
                     security2TimeoutOccurred("NONCE_GET");
                     return;
@@ -945,7 +945,7 @@ public class ZWaveNodeInitStageAdvancer {
                     // Step 25. B->A : Nonce Get
                     // Step 26. A->B : Nonce Report
                     if (security2CommandClass.waitForResponseToQueue(
-                            CommandClassSecurity2V1.SECURITY_2_COMMANDS_NONCE_REPORT) == false) {
+                            CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
                         security2TimeoutOccurred("NONCE_GET " + keyBeingGranted);
                         node.setSecurityCommandClass(null);
                         return;
@@ -972,7 +972,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // All Keys have been requested.
 
                 // wait for Step 30. B->A : Security 2 Transfer End
-                if (security2CommandClass.waitForReceivedTransferEnd() == false) {
+                if (security2CommandClass.waitToReceiveTransferEnd() == false) {
                     security2TimeoutOccurred("e(TRANSFER_END)");
                     node.setSecurityCommandClass(null);
                     return;

@@ -50,7 +50,7 @@ public class ZWaveSecurityCommandClassTest {
         // assertTrue(Arrays.equals(expectedBytes, actualBytes));
     }
 
-    @Ignore // TODO:
+    @Ignore // TODO: LOW test case
     @Test
     public void testEncapsulatePayload() throws Exception {
         byte nodeId = 0x01;

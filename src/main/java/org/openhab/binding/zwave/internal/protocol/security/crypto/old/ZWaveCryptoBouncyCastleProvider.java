@@ -63,8 +63,7 @@ class ZWaveCryptoBouncyCastleProvider {
 
     private SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(
             EntropySourceProvider entrophySourceProvider, byte[] personalizationString, byte[] nonceBytes,
-            boolean makePredictionResistant) throws ZWaveCryptoException { // TODO: remove
-                                                                           // makePredictionResistant
+            boolean makePredictionResistant) throws ZWaveCryptoException {
         // @formatter:off
         /*
          * AES_128_CTR_DRNG is used for two different functions in the spec (CC:009F.01.00.11.016 and

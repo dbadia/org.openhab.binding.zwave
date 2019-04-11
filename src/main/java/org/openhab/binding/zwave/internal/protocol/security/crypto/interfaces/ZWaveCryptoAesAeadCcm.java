@@ -2,7 +2,6 @@ package org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces;
 
 import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
 
-// TODO: rename all Provider to nothing;
 public interface ZWaveCryptoAesAeadCcm {
 
     /**

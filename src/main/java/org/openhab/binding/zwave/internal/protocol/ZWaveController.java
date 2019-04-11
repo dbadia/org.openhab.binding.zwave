@@ -30,7 +30,7 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Basic;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionState;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiInstanceCommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
@@ -441,8 +441,8 @@ public class ZWaveController {
                         }
 
                         // If this is the security command class, set the keys
-                        if (commandClass instanceof ZWaveSecurityCommand) {
-                            ((ZWaveSecurityCommand) commandClass).setNetworkKeys(networkSecurityKeys);
+                        if (commandClass instanceof ZWaveSecurityCommandClass) {
+                            ((ZWaveSecurityCommandClass) commandClass).setNetworkKeys(networkSecurityKeys);
                         }
                     }
                 }

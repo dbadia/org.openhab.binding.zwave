@@ -12,7 +12,7 @@ import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetwork
  * @author Dave Badia
  *
  */
-public interface ZWaveSecurityCommand { // TODO: rename to ZWaveSecurityCommandClass
+public interface ZWaveSecurityCommandClass {
     public byte[] decapsulateSecurityMessage(byte[] ciphertextBytes);
 
     public byte[] securelyEncapsulateTransaction(byte[] payload);

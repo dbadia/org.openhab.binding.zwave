@@ -21,7 +21,7 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Generic;
 import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Specific;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass.CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
@@ -245,8 +245,8 @@ public class ZWaveInclusionController implements ZWaveEventListener {
                                 commandClass);
 
                         // Add the network key to the security class
-                        if (zwaveCommandClass instanceof ZWaveSecurityCommand) {
-                            ((ZWaveSecurityCommand) zwaveCommandClass).setNetworkKeys(networkSecurityKeys);
+                        if (zwaveCommandClass instanceof ZWaveSecurityCommandClass) {
+                            ((ZWaveSecurityCommandClass) zwaveCommandClass).setNetworkKeys(networkSecurityKeys);
                         }
                         zwaveCommandClass.setControlClass(control);
                         newNode.addCommandClass(zwaveCommandClass);

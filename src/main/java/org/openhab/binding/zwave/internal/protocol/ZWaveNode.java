@@ -38,7 +38,7 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiComman
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiInstanceCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2CommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommand;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveVersionCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveWakeUpCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
@@ -142,7 +142,7 @@ public class ZWaveNode {
     Long inclusionTimer = null;
 
     @XStreamOmitField
-    private volatile ZWaveSecurityCommand securityCommandClass = null;
+    private volatile ZWaveSecurityCommandClass securityCommandClass = null;
 
     /**
      * Constructor. Creates a new instance of the ZWaveNode class.
@@ -905,13 +905,13 @@ public class ZWaveNode {
         final CommandClass commandClass = CommandClass.getCommandClass(payload.getCommandClassId());
 
         if (CommandClass.COMMAND_CLASS_SECURITY == commandClass) {
-            logger.debug("NODE {}: SECURITY check internal", nodeId);
+            logger.debug("NODE {}: SECURITY check payload requires security internal", nodeId);
             // CommandClass.SECURITY is a special case because only some commands get encrypted
             return ZWaveSecurity0CommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
         }
 
         if (CommandClass.COMMAND_CLASS_SECURITY_2 == commandClass) {
-            logger.debug("NODE {}: SECURITY_2 check internal", nodeId);
+            logger.debug("NODE {}: SECURITY_2 check payload requires security internal", nodeId);
             // CommandClass.SECURITY_2 is a special case because only some commands get encrypted
             return ZWaveSecurity2CommandClass.doesCommandRequireSecurityEncapsulation(payload.getCommandClassCommand());
         }
@@ -1254,7 +1254,7 @@ public class ZWaveNode {
 
         } else if (payload.getCommandClassId() == CommandClass.COMMAND_CLASS_SECURITY_2.getKey()
                 && (payload.getCommandClassCommand() == SECURITY_2_MESSAGE_ENCAPSULATION
-                        || payload.getCommandClassCommand() == SECURITY_2_COMMANDS_NONCE_GET)) {
+                        || payload.getCommandClassCommand() == SECURITY_2_NONCE_GET)) {
 
             logger.debug("NODE {}: Decapsulating COMMAND_CLASS_SECURITY_2", getNodeId());
 
@@ -1429,11 +1429,11 @@ public class ZWaveNode {
         inclusionTimer = System.nanoTime();
     }
 
-    public ZWaveSecurityCommand getSecurityCommandClass() {
+    public ZWaveSecurityCommandClass getSecurityCommandClass() {
         return securityCommandClass;
     }
 
-    public void setSecurityCommandClass(ZWaveSecurityCommand securityCommandClass) {
+    public void setSecurityCommandClass(ZWaveSecurityCommandClass securityCommandClass) {
         this.securityCommandClass = securityCommandClass;
     }
 
