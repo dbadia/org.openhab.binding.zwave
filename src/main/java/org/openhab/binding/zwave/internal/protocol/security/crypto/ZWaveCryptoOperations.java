@@ -15,7 +15,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCmac;
-import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDebug;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
@@ -68,7 +68,7 @@ public class ZWaveCryptoOperations {
 
     private final ZWaveCryptoAesCmac cmacProvider;
 
-    private final ZWaveCryptoAesCtrDebug ctrDrbgProvider;
+    private final ZWaveCryptoAesCtrDrbg ctrDrbgProvider;
 
     private final ZWaveCryptoDiffieHellman diffieHellmanProvider;
 
@@ -92,7 +92,7 @@ public class ZWaveCryptoOperations {
     }
 
     protected ZWaveCryptoOperations(ZWaveSecurityNetworkKeys networkSecurityKeys, ZWaveCryptoAesAeadCcm aeadCcmProvider,
-            ZWaveCryptoAesCmac cmacProvider, ZWaveCryptoAesCtrDebug ctrDrbgProvider,
+            ZWaveCryptoAesCmac cmacProvider, ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
             ZWaveCryptoDiffieHellman diffieHellmanProvider, SecureRandom prng) {
         super();
         this.networkSecurityKeys = networkSecurityKeys;

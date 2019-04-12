@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCmac;
-import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDebug;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +40,7 @@ public class ZWaveCryptoOperationsFactory {
                 try {
                     final ZWaveCryptoAesAeadCcm aeadCcmProvider = new ZWaveCryptoAesAeadCcmImpl();
                     final ZWaveCryptoAesCmac cmacProvider = new ZWaveCryptoAesCmacImpl();
-                    final ZWaveCryptoAesCtrDebug ctrDrbgProvider = new ZWaveCryptoAesCtrDebugImpl();
+                    final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgImpl();
                     final ZWaveCryptoDiffieHellman diffieHellmanProvider = new ZWaveCryptoDiffieHellmanImpl();
                     InitTimer timer = new InitTimer();
                     waitForHardwareBaseEntropy(timer);
@@ -115,7 +115,7 @@ public class ZWaveCryptoOperationsFactory {
      *
      * @param ctrDrbgProvider
      */
-    private static final SecureRandom initPrngAccordingToZwaveSpec(ZWaveCryptoAesCtrDebug ctrDrbgProvider,
+    private static final SecureRandom initPrngAccordingToZwaveSpec(ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
             byte[] hardwareSourcedEntrophyInput) throws ZWaveCryptoException {
         return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(hardwareSourcedEntrophyInput,
                 PRNG_PERSONALIZATION_STRING, NONCE_NONE, true);
