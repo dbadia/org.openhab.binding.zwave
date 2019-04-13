@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 public class ZWaveCryptoOperations {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperations.class);
 
+    public static final byte RNG_ENTROPY_BYTE_COUNT = 32;
     public static final int NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS = 128;
 
     /*

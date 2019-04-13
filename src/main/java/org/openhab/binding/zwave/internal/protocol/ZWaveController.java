@@ -41,11 +41,15 @@ import org.openhab.binding.zwave.internal.protocol.event.ZWaveTransactionComplet
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeInitStage;
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeSerializer;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoHardwareRngCoordinator;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperations;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.ControllerSetDefaultMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.DeleteReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.GetControllerCapabilitiesMessageClass;
+import org.openhab.binding.zwave.internal.protocol.serialmessage.GetRandomMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.GetRoutingInfoMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.GetSucNodeIdMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.GetVersionMessageClass;
@@ -115,6 +119,8 @@ public class ZWaveController {
     private final ZWaveIoHandler ioHandler;
 
     private final ZWaveSecurityNetworkKeys networkSecurityKeys;
+
+    private ZWaveCryptoHardwareRngCoordinator hardwareRngCoordinator;
 
     // Constructors
     public ZWaveController(ZWaveIoHandler handler) {
@@ -291,6 +297,13 @@ public class ZWaveController {
                 deviceType = ((SerialApiGetCapabilitiesMessageClass) processor).getDeviceType();
                 apiCapabilities = ((SerialApiGetCapabilitiesMessageClass) processor).getApiCapabilities();
 
+                boolean supportsRandom = apiCapabilities.contains(SerialMessage.SerialMessageClass.GetRandom);
+                if (supportsRandom) {
+                    enqueue(new GetRandomMessageClass().doRequest(ZWaveCryptoOperations.RNG_ENTROPY_BYTE_COUNT));
+                }
+                hardwareRngCoordinator = new ZWaveCryptoHardwareRngCoordinator(supportsRandom);
+                ZWaveCryptoOperationsFactory.setHardwareRngCoordinator(hardwareRngCoordinator);
+
                 enqueue(new SerialApiGetInitDataMessageClass().doRequest());
                 break;
             case SerialApiGetInitData:
@@ -301,6 +314,9 @@ public class ZWaveController {
 
                 // Wait for all threads to complete starting initialisation before we advise the system
                 new ZWaveInitWaitThread(initList).start();
+                break;
+            case GetRandom:
+                hardwareRngCoordinator.analyzeResponse((GetRandomMessageClass) processor);
                 break;
             default:
                 break;

@@ -58,7 +58,6 @@ public class DeleteReturnRouteMessageClass extends ZWaveCommandProcessor {
                     ZWaveNetworkEvent.State.Failure));
             transaction.setTransactionCanceled();
         }
-
         return true;
     }
 

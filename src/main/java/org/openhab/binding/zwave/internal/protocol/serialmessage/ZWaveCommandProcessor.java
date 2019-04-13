@@ -64,7 +64,7 @@ public abstract class ZWaveCommandProcessor {
     /**
      * Method for handling the response from the controller
      *
-     * @param zController the ZWave controller
+     * @param zController     the ZWave controller
      * @param lastSentMessage The original message we sent to the controller
      * @param incomingMessage The response from the controller
      * @return
@@ -79,7 +79,7 @@ public abstract class ZWaveCommandProcessor {
     /**
      * Method for handling the request from the controller
      *
-     * @param zController the ZWave controller
+     * @param zController     the ZWave controller
      * @param lastSentMessage The original message we sent to the controller
      * @param incomingMessage The response from the controller
      * @return
@@ -110,6 +110,7 @@ public abstract class ZWaveCommandProcessor {
             messageMap.put(SerialMessage.SerialMessageClass.DeleteReturnRoute, DeleteReturnRouteMessageClass.class);
             messageMap.put(SerialMessage.SerialMessageClass.DeleteSUCReturnRoute,
                     DeleteSucReturnRouteMessageClass.class);
+            messageMap.put(SerialMessage.SerialMessageClass.GetRandom, GetRandomMessageClass.class);
             messageMap.put(SerialMessage.SerialMessageClass.GetRoutingInfo, GetRoutingInfoMessageClass.class);
             messageMap.put(SerialMessage.SerialMessageClass.GetVersion, GetVersionMessageClass.class);
             messageMap.put(SerialMessage.SerialMessageClass.GetSucNodeId, GetSucNodeIdMessageClass.class);
