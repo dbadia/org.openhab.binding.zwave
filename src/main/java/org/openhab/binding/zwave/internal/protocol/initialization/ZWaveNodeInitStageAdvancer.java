@@ -571,17 +571,6 @@ public class ZWaveNodeInitStageAdvancer {
      *
      */
     private void doSecureS2Stages(ZWaveSecurity2CommandClass security2CommandClass) {
-        try {
-            ZWaveSecurity2CommandClass.initializeCrypto();
-        } catch (RuntimeException e) {
-            logger.error("NODE {}: S2 crypto initialization failed", e);
-
-            controller.notifyEventListeners(
-                    new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
-            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=CRYTO_INIT_ERROR", node.getNodeId());
-            return;
-        }
-
         /*
          * In the rest of this method, the term "Step" is in direct reference to the ZWave Spec:
          * CC:009F.01.00.11.056 The key exchange MUST comply with the following steps
@@ -944,8 +933,8 @@ public class ZWaveNodeInitStageAdvancer {
 
                     // Step 25. B->A : Nonce Get
                     // Step 26. A->B : Nonce Report
-                    if (security2CommandClass.waitForResponseToQueue(
-                            CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
                         security2TimeoutOccurred("NONCE_GET " + keyBeingGranted);
                         node.setSecurityCommandClass(null);
                         return;

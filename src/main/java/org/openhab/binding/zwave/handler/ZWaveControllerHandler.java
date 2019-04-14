@@ -169,10 +169,11 @@ public ZWaveControllerHandler(@NonNull Bridge bridge) {
             }
         }
 
-        if (networkSecurityKeys.missingKeys().isEmpty() == false) {
-            // Key generation is slow on some platforms so we must run it in the background
-            Thread keyGenerationThread = new NetworkKeyGenerationThread(networkSecurityKeys);
-            keyGenerationThread.start();
+        // Init Crypto if it hasn't been done yet
+        if (ZWaveCryptoOperationsFactory.isInitialized() == false) {
+            // Crypto init is slow on some platforms so run it in the background
+            Thread cryptoInitThread = new CryptoInitThread(networkSecurityKeys);
+            cryptoInitThread.start();
         }
 
         param = getConfig().get(CONFIGURATION_HEALTIME);
@@ -793,10 +794,10 @@ public ZWaveControllerHandler(@NonNull Bridge bridge) {
         return controller.getHomeId();
     }
 
-    private class NetworkKeyGenerationThread extends Thread {
+    private class CryptoInitThread extends Thread {
         private ZWaveSecurityNetworkKeys networkSecurityKeys;
 
-        private NetworkKeyGenerationThread(ZWaveSecurityNetworkKeys networkSecurityKeys) {
+        private CryptoInitThread(ZWaveSecurityNetworkKeys networkSecurityKeys) {
             super("ZWaveNetworkKeyGenerateThread");
             this.networkSecurityKeys = networkSecurityKeys;
         }

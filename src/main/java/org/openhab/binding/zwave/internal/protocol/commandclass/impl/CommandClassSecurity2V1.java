@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.openhab.binding.zwave.internal.protocol.SerialMessage;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
@@ -154,6 +155,7 @@ public class CommandClassSecurity2V1 {
         } else {
             logger.debug("Parsing SECURITY_2_KEX_SET");
         }
+        logger.debug("Parsing SECURITY_2_KEX_REPORT {}", SerialMessage.bb2hex(payload)); // TODO: delete
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Echo'
@@ -507,7 +509,8 @@ public class CommandClassSecurity2V1 {
             if (set) {
                 B enumValue = (B) bitMaskLookupTable.get(i);
                 if (enumValue == null) {
-                    logger.error("Unsupported bit set on " + enumClass + " at position" + i);
+                    logger.error("Unsupported bit set on {} at position {} for byte {}", enumClass, i,
+                            String.format("%02X ", toParse));
                 } else {
                     parsedList.add(enumValue);
                 }

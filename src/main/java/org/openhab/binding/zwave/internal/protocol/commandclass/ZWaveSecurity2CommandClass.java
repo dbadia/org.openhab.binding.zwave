@@ -107,8 +107,6 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
 
     private static final long TEN_SECONDS_MILLIS = TimeUnit.SECONDS.toMillis(10);
 
-    private static ZWaveCryptoOperations cryptoOperations;
-
     private static final ExecutorService BACKGROUND_EXECUTOR_SERVICE = Executors.newCachedThreadPool();
 
     /**
@@ -125,6 +123,9 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             PUBLIC_KEY_REPORT
     );
     // @formatter:on
+
+    @XStreamOmitField
+    private final ZWaveCryptoOperations cryptoOperations;
 
     @XStreamOmitField
     private final byte[] homeId;
@@ -257,7 +258,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * Flag set by ZWaveNodeInitStageAdvancer if secure inclusion is in progress
      */
     @XStreamOmitField
-    private AtomicBoolean performingSecureInclusion;
+    private AtomicBoolean performingSecureInclusion = new AtomicBoolean(false);
 
     /**
      * The encapsulation command has no key indicator, so we track the key being exchange so we know where to store the
@@ -301,21 +302,12 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         super(node, controller, endpoint);
         this.controllerNodeId = controller.getOwnNodeId();
         this.homeId = ByteBuffer.allocate(4).putInt(controller.getHomeId()).array();
-        if (cryptoOperations == null) {
-            throw new IllegalStateException(
-                    "initializeCrypto() must be called prior to " + getClass().getSimpleName() + " constructor");
-        }
+        this.cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
     }
 
     @Override
     public CommandClass getCommandClass() {
         return CommandClass.COMMAND_CLASS_SECURITY_2;
-    }
-
-    public static void initializeCrypto() {
-        if (cryptoOperations == null) {
-            cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
-        }
     }
 
     @ZWaveResponseHandler(id = CommandClassSecurity2V1.SECURITY_2_NONCE_GET, name = "SECURITY_2_COMMANDS_NONCE_GET")
