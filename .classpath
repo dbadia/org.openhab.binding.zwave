@@ -10,5 +10,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="lib/bcprov-jdk15on-160.jar"/>
+	<classpathentry kind="lib" path="lib/curve25519-java-0.5.0.jar"/>
 	<classpathentry kind="output" path="target/test-classes"/>
 </classpath>
