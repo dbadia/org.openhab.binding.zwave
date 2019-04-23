@@ -4,6 +4,7 @@ import java.security.DrbgParameters;
 import java.security.DrbgParameters.Capability;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 
@@ -51,4 +52,31 @@ public class ZWaveCryptoAesCtrDrbgImpl implements ZWaveCryptoAesCtrDrbg {
         }
     }
 
+    // TODO: delete
+    private static final byte[] PRNG_PERSONALIZATION_STRING = new byte[32];
+    private static final byte[] NONCE_NONE = new byte[0];
+
+    public static void main(String[] args) {
+        try {
+            SecureRandom random = new ZWaveCryptoAesCtrDrbgImpl().buildAesCounterModeDeterministicRandomNumberGenerator(
+                    new byte[32], PRNG_PERSONALIZATION_STRING, NONCE_NONE, true);
+
+            // Use it to ensure it works correctly
+            byte[] bytes = new byte[16];
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+            random.nextBytes(bytes);
+            System.out.println(Arrays.toString(bytes));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }

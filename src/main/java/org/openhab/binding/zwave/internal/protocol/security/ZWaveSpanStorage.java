@@ -30,7 +30,7 @@ public class ZWaveSpanStorage {
         }
     }
 
-    public byte[] getNextNonce(Direction direction, ZWaveKeyType keytype) {
+    public byte[] getNextIv(Direction direction, ZWaveKeyType keytype) {
         byte[] nonce = new byte[NONCE_SIZE];
         lookupGenerator(direction, keytype).nextBytes(nonce);
         return nonce;

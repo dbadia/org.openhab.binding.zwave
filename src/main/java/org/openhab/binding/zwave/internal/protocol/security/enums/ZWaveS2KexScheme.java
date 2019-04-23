@@ -5,7 +5,9 @@ package org.openhab.binding.zwave.internal.protocol.security.enums;
  *
  */
 public enum ZWaveS2KexScheme implements ZWaveS2BitmaskEnumType {
+    // @formatter:off
     _1("KEX Scheme 1", 1);
+    // @formatter:on
 
     private final String toStringString;
     private final int bitPosition;

@@ -234,7 +234,7 @@ public class ZWaveSecurity0CommandClass extends ZWaveCommandClass implements ZWa
             }
 
             // Add the new class if it doesn't exist
-            getNode().getEndpoint(0).addSecureCommandClass(commandClass);
+            getNode().getEndpoint(0).setSecureCommandClass(commandClass);
             if (getNode().getEndpoint(0).getCommandClass(commandClass) == null) {
                 ZWaveCommandClass zwaveCommandClass = ZWaveCommandClass.getInstance(secureClassKey, getNode(),
                         getController());

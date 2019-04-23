@@ -6,6 +6,13 @@ import org.openhab.binding.zwave.internal.protocol.serialmessage.GetRandomMessag
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Synchronizes the crypto initiation code and the gathering of entropy from the ZWave stick hardware random number
+ * generator (if supported)
+ *
+ * @author Dave Badia
+ *
+ */
 public class ZWaveCryptoHardwareRngCoordinator {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoHardwareRngCoordinator.class);
     private Object lock = new Object();
@@ -47,8 +54,8 @@ public class ZWaveCryptoHardwareRngCoordinator {
                     lock.wait(System.currentTimeMillis() - stopAt);
                     logger.debug("waitForRandom: woke up  {}", Thread.currentThread().getName());
                 } catch (InterruptedException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
+                    // As recommended in Java Concurrency in Practice by Brian Goetz
+                    Thread.currentThread().interrupt();
                 }
             }
         }
@@ -58,6 +65,8 @@ public class ZWaveCryptoHardwareRngCoordinator {
             throw exception;
         } else if (randomBytes == null && System.currentTimeMillis() > stopAt) {
             throw new ZWaveCryptoException("Timed out waiting for controller GetRandom reply");
+        } else if (randomBytes == null) {
+            throw new ZWaveCryptoException("code error, randomBytes == null");
         }
         return randomBytes;
     }

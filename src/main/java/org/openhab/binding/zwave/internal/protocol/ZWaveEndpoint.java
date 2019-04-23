@@ -13,9 +13,7 @@
 package org.openhab.binding.zwave.internal.protocol;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Basic;
@@ -38,13 +36,14 @@ public class ZWaveEndpoint {
     private final ZWaveDeviceClass deviceClass;
     private final int endpointId;
 
-    private final Set<CommandClass> secureCommandClasses = new HashSet<CommandClass>();
+    // An endpoint can only have one secure command class set at a time
+    private CommandClass secureCommandClass = null;
     private final Map<CommandClass, ZWaveCommandClass> supportedCommandClasses = new ConcurrentHashMap<CommandClass, ZWaveCommandClass>();
 
     /**
      * Constructor. Creates a new instance of the ZWaveEndpoint class.
      *
-     * @param node the parent node of this endpoint.
+     * @param node       the parent node of this endpoint.
      * @param endpointId the endpoint ID.
      */
     public ZWaveEndpoint(int endpointId) {
@@ -76,7 +75,7 @@ public class ZWaveEndpoint {
      * class.
      *
      * @param commandClass
-     *            The command class to get.
+     *                         The command class to get.
      * @return the command class.
      */
     public ZWaveCommandClass getCommandClass(CommandClass commandClass) {
@@ -99,15 +98,19 @@ public class ZWaveEndpoint {
      *
      * @param commandClass the command class instance to add.
      */
-    public void addSecureCommandClass(CommandClass commandClass) {
-        secureCommandClasses.add(commandClass);
+    public void setSecureCommandClass(CommandClass commandClass) {
+        if (secureCommandClass != null && secureCommandClass != commandClass) {
+            throw new IllegalStateException("setSecureCommandClass was called with " + commandClass
+                    + " but secureCommandClass was already set to " + secureCommandClass);
+        }
+        secureCommandClass = commandClass;
     }
 
     /**
      * Checks if a commandClass is supported by this endpoint.
      *
      * @param commandClass
-     *            The command class to test.
+     *                         The command class to test.
      * @return true if the command class is supported.
      */
     public boolean supportsCommandClass(CommandClass commandClass) {
@@ -118,11 +121,14 @@ public class ZWaveEndpoint {
      * Checks if a commandClass is supported in secure mode by this endpoint.
      *
      * @param commandClass
-     *            The command class to test.
+     *                         The command class to test.
      * @return true if the command class is supported in secure mode.
      */
     public boolean supportsSecureCommandClass(CommandClass commandClass) {
-        return secureCommandClasses.contains(commandClass);
+        if (secureCommandClass == null) {
+            return false;
+        }
+        return secureCommandClass.equals(commandClass);
     }
 
     /**
@@ -145,8 +151,8 @@ public class ZWaveEndpoint {
         return deviceClass;
     }
 
-    public Set<CommandClass> getSecureCommandClasses() {
-        return secureCommandClasses;
+    public CommandClass getSecureCommandClass() {
+        return secureCommandClass;
     }
 
     @Override
@@ -163,16 +169,7 @@ public class ZWaveEndpoint {
             first = false;
             builder.append(cmdClass);
         }
-        builder.append("] Secure Classes[");
-        first = true;
-        for (CommandClass cmdClass : secureCommandClasses) {
-            if (!first) {
-                builder.append(" ");
-            }
-            first = false;
-            builder.append(cmdClass);
-        }
-        builder.append("]");
+        builder.append("] Secure Class[ ").append(secureCommandClass).append("]");
         return builder.toString();
     }
 }

@@ -1,5 +1,8 @@
 package org.openhab.binding.zwave.internal.protocol.security.enums;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 3.1.7.4 Security 2 KEX Fail Command - Table 16
  *
@@ -49,7 +52,17 @@ public enum ZWaveS2FailType {
      */
     KEX_FAIL_DSK(0x0B),;
 
+    private static final Map<Integer, ZWaveS2FailType> LOOKUP_TABLE = new ConcurrentHashMap<>();
     private final int theByte;
+
+    public static ZWaveS2FailType parse(int data) {
+        if (LOOKUP_TABLE.isEmpty()) {
+            for (ZWaveS2FailType type : ZWaveS2FailType.values()) {
+                LOOKUP_TABLE.put(type.theByte, type);
+            }
+        }
+        return LOOKUP_TABLE.get(data);
+    }
 
     private ZWaveS2FailType(int theByte) {
         this.theByte = theByte;

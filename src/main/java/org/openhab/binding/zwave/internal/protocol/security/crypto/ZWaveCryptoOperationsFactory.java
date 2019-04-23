@@ -100,7 +100,7 @@ public class ZWaveCryptoOperationsFactory {
                     e);
             entropyGenerator = new SecureRandom();
         }
-        byte[] hardwareEntropyBytes = new byte[ZWaveCryptoOperations.RNG_ENTROPY_BYTE_COUNT];
+        byte[] hardwareEntropyBytes = new byte[ZWaveCryptoOperations.RNG_ENTROPY_BYTE_LENGTH];
         entropyGenerator.nextBytes(hardwareEntropyBytes);
         stopWatch.record("newSecureRandom");
         logger.debug("waitForHardwareBaseEntropy: returning SecureRandom bytes");
@@ -129,8 +129,12 @@ public class ZWaveCryptoOperationsFactory {
      */
     private static final SecureRandom initPrngAccordingToZwaveSpec(ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
             byte[] hardwareSourcedEntrophyInput) throws ZWaveCryptoException {
-        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(hardwareSourcedEntrophyInput,
-                PRNG_PERSONALIZATION_STRING, NONCE_NONE, true);
+        SecureRandom random = ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(
+                hardwareSourcedEntrophyInput, PRNG_PERSONALIZATION_STRING, NONCE_NONE, true);
+
+        // Use it to ensure it works correctly
+        random.nextBytes(new byte[16]);
+        return random;
     }
 
     /**

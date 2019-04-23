@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public enum ZWaveS2ECDHProfile implements ZWaveS2BitmaskEnumType {
-    Curve25519(1, 32);
+    Curve25519(0, 32);
 
     private static Map<String, ZWaveS2ECDHProfile> lookupTable = new ConcurrentHashMap<>();
 

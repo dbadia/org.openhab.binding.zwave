@@ -16,11 +16,11 @@ import org.openhab.binding.zwave.internal.protocol.SerialMessage;
  *
  */
 public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
-    S2_TEMP(0, "S2 Temporary Pairing", 100, "invalid", false, false),
+    S2_TEMP(-1, "S2 Temporary Pairing", 100, "invalid", false, false),
     S2_ACCESS_CONTROL(2, "S2 Access Control Class", 1, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_2, true, true),
-    S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_1, true,
-            false),
-    S2_UNAUTHENTICATED(3, "S2 Unauthenticated Class", 3, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_0, false,
+    S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_1, false,
+            true),
+    S2_UNAUTHENTICATED(0, "S2 Unauthenticated Class", 3, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_0, false,
             false),
     S0(7, "S0 Secure legacy devices", 4, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, false, false);
 
@@ -36,16 +36,20 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
      * The name of the this key as used in {@link ZWaveControllerHandler} and defined in {@link ZWaveBindingConstants}
      */
     private String controllerConstantName;
-    private boolean requiresDskConfirmation;
     private boolean requiredToSupportCsaWhenRequestedByNode;
+    /**
+     * Device authentication, where the user must input or scan a code on the device being included
+     * See CC:009F.01.08.11.007, CC:009F.01.08.11.008, CC:009F.01.08.11.00B
+     */
+    private boolean authenticated;
 
     private ZWaveKeyType(int bitPosition, String description, int securityLevel, String controllerConstantName,
-            boolean requiresDskConfirmation, boolean requiredToSupportCsaIfRequestedByNode) {
+            boolean requiredToSupportCsaIfRequestedByNode, boolean authenticated) {
         this.bitPosition = bitPosition;
         this.securityLevel = securityLevel;
         this.controllerConstantName = controllerConstantName;
-        this.requiresDskConfirmation = requiresDskConfirmation;
         this.requiredToSupportCsaWhenRequestedByNode = requiredToSupportCsaIfRequestedByNode;
+        this.authenticated = authenticated;
     }
 
     public static List<ZWaveKeyType> valuesWeakestToStrongest(boolean excludeS0) {
@@ -81,10 +85,6 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
         }
     }
 
-    public boolean isRequiresDskConfirmation() {
-        return requiresDskConfirmation;
-    }
-
     @Override
     public int getBitPosition() {
         return bitPosition;
@@ -103,5 +103,9 @@ public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
 
     public String getControllerConstantName() {
         return controllerConstantName;
+    }
+
+    public boolean isAuthenticated() {
+        return authenticated;
     }
 }

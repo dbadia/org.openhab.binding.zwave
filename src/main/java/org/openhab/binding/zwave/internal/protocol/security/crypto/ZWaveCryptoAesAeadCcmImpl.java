@@ -85,7 +85,7 @@ class ZWaveCryptoAesAeadCcmImpl implements ZWaveCryptoAesAeadCcm {
                     Arrays.toString(additionalAuthenticationData), Arrays.toString(outputBytes));
             return outputBytes;
         } catch (InvalidCipherTextException | IllegalStateException e) {
-            throw new ZWaveCryptoException("Error during AES CCM decryption", e);
+            throw new ZWaveCryptoException("Error during AES CCM decryption: " + e.toString(), e);
         }
     }
 

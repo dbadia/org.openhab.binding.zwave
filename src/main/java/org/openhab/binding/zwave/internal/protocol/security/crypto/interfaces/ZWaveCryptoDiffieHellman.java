@@ -34,5 +34,5 @@ public interface ZWaveCryptoDiffieHellman {
      * @throws ZWaveCryptoException
      */
     public abstract byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes,
-            int nodeIdForLogging) throws ZWaveCryptoException;
+            SecureRandom entrophySource) throws ZWaveCryptoException;
 }

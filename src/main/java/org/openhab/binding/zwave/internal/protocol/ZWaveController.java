@@ -299,7 +299,7 @@ public class ZWaveController {
 
                 boolean supportsRandom = apiCapabilities.contains(SerialMessage.SerialMessageClass.GetRandom);
                 if (supportsRandom) {
-                    enqueue(new GetRandomMessageClass().doRequest(ZWaveCryptoOperations.RNG_ENTROPY_BYTE_COUNT));
+                    enqueue(new GetRandomMessageClass().doRequest(ZWaveCryptoOperations.RNG_ENTROPY_BYTE_LENGTH));
                 }
                 hardwareRngCoordinator = new ZWaveCryptoHardwareRngCoordinator(supportsRandom);
                 ZWaveCryptoOperationsFactory.setHardwareRngCoordinator(hardwareRngCoordinator);

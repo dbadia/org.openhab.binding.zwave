@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,6 +63,8 @@ public class CommandClassSecurity2V1 {
     public final static int SECURITY_2_NETWORK_KEY_REPORT = 0x0A;
     public final static int SECURITY_2_NETWORK_KEY_VERIFY = 0x0B;
     public static final int SECURITY_2_TRANSFER_END = 0x0C;
+
+    public static final int NONCE_LENGTH_BYTES = 16;
 
     private final static Map<Class<? extends Enum>, Map<Integer, ZWaveS2BitmaskEnumType>> ENUM_LOOKUP_CACHE_TABLE = new ConcurrentHashMap<>();
 
@@ -187,16 +190,16 @@ public class CommandClassSecurity2V1 {
     }
 
     public static Map<String, Object> handlePublicKeyReport(byte[] payload) {
-        logger.debug("Parsing PUBLIC_KEY_REPORT");
+        logger.debug("Parsing PUBLIC_KEY_REPORT: {}", SerialMessage.bb2hex(payload));
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Including node'
-        BitSet bitSet = BitSet.valueOf(new byte[] { payload[0] });
+        BitSet bitSet = BitSet.valueOf(new byte[] { payload[2] });
         responseTable.put("INCLUDING_NODE", bitSet.get(0));
 
         // ECDH Public key
-        byte[] publicKeyBytes = new byte[payload.length - 1];
-        System.arraycopy(payload, 1, publicKeyBytes, 0, payload.length - 1);
+        byte[] publicKeyBytes = new byte[payload.length - 3];
+        System.arraycopy(payload, 1, publicKeyBytes, 0, payload.length - 3);
         responseTable.put("NODE_PUBLIC_KEY_BYTES", publicKeyBytes);
 
         return responseTable;
@@ -214,6 +217,7 @@ public class CommandClassSecurity2V1 {
         bitmask.set(0); // CC:009F.01.08.11.003 When sent by the including node this flag MUST be set to ‘1’.
         writeBitmask(bitmask, outputData);
 
+        logger.debug("PUBLIC_KEY_REPORT count={}", ourPublicKeyBytes.length);
         outputData.write(ourPublicKeyBytes);
 
         return outputData.toByteArray();
@@ -230,16 +234,16 @@ public class CommandClassSecurity2V1 {
     }
 
     public static Map<String, Object> handleNonceGet(byte[] payload) {
-        logger.debug("Parsing NONCE_GET");
+        logger.debug("Parsing NONCE_GET {}", SerialMessage.bb2hex(payload));
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
-        int sequenceNumber = payload[0] & 0xFF;
+        int sequenceNumber = payload[2] & 0xFF;
         responseTable.put("SEQUENCE_NUMBER", sequenceNumber);
 
         return responseTable;
     }
 
-    public static byte[] buildNonceReport(int sequenceNumber, boolean mpanOutOfSync, boolean spanOutOfSync,
+    public static byte[] buildNonceReport(int sequenceNumber, boolean spanOutOfSync, boolean mpanOutOfSync,
             byte[] reiBytes) throws IOException {
         logger.debug("Creating command message SECURITY_2_COMMANDS_NONCE_REPORT version 1");
 
@@ -252,18 +256,21 @@ public class CommandClassSecurity2V1 {
 
         // 8 bits: MOS SOS Reserved
         BitSet bitmask = new BitSet(8); // All zeros
-        if (mpanOutOfSync) {
+        if (spanOutOfSync) {
             bitmask.set(0);
         }
-        if (spanOutOfSync) {
+        if (mpanOutOfSync) {
             bitmask.set(1);
         }
         writeBitmask(bitmask, outputData);
 
+        if (reiBytes.length != 16) {
+            throw new IllegalStateException("REI had invalid size of " + reiBytes.length);
+        }
         // CC:009F.01.02.11.00F
         // If the SOS flag is set to ‘0’, the REI field MUST NOT be included in the command
         // If the SOS flag is set to ‘1’, the REI field MUST be included in the command.
-        if (spanOutOfSync) {
+        if (spanOutOfSync || mpanOutOfSync) {
             outputData.write(reiBytes);
         } else if (reiBytes != null) {
             logger.warn("buildNonceReport was passed SOS false but with an REI.  REI not sent");
@@ -273,20 +280,21 @@ public class CommandClassSecurity2V1 {
     }
 
     public static Map<String, Object> handleNonceReport(byte[] payload) {
-        logger.debug("Parsing NONCE_REPORT");
+        logger.debug("Parsing NONCE_REPORT {}", SerialMessage.bb2hex(payload));
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
-        byte sequenceNumber = (byte) (payload[0] & 0xFF);
+        int index = 2;
+        byte sequenceNumber = (byte) (payload[index++] & 0xFF);
         responseTable.put("SEQUENCE_NUMBER", sequenceNumber);
 
-        byte outOfSyncMask = (byte) (payload[1] & 0xFF);
+        byte outOfSyncMask = (byte) (payload[index++] & 0xFF);
         // Parse MOS and SOS
         responseTable.put("SOS", Boolean.valueOf((outOfSyncMask & 0x1) == 1));
         responseTable.put("MOS", Boolean.valueOf((outOfSyncMask & 0x2) == 1));
 
-        if (payload.length == 18) {
-            byte[] nonce = new byte[16];
-            System.arraycopy(payload, 2, nonce, 0, 16);
+        if (payload.length >= index + NONCE_LENGTH_BYTES) {
+            byte[] nonce = new byte[NONCE_LENGTH_BYTES];
+            System.arraycopy(payload, index, nonce, 0, 16);
             responseTable.put("NONCE", nonce);
         }
         return responseTable;
@@ -373,29 +381,36 @@ public class CommandClassSecurity2V1 {
         int msgOffset = 2;
 
         // Parse 'Sequence'
-        responseTable.put("SEQUENCE", new Integer(payload[msgOffset++]));
-        msgOffset += 1;
+        responseTable.put("SEQUENCE", Integer.valueOf(payload[msgOffset++]));
 
         // Parse 'Extension' and 'Encrypted Extension'
         BitSet bitSet = BitSet.valueOf(new byte[] { payload[msgOffset++] });
-        boolean hasExtension = bitSet.get(0);
-        responseTable.put("HAS_EXTENSION", hasExtension);
+        boolean hasPlaintextExtension = bitSet.get(0);
+        responseTable.put("HAS_PLAINTEXT_EXTENSION", hasPlaintextExtension);
         boolean hasEncryptedExtension = bitSet.get(1);
         responseTable.put("HAS_ENCRYPTED_EXTENSION", hasEncryptedExtension);
-        logger.debug("Parsing SECURITY_2_MESSAGE_ENCAPSULATION extension={}, encrypted extension={}" + hasExtension,
-                hasEncryptedExtension);
-        msgOffset++;
+        logger.debug("Parsing SECURITY_2_MESSAGE_ENCAPSULATION plaintextExtension={}, encryptedExtension={}",
+                hasPlaintextExtension, hasEncryptedExtension);
 
         // Parse the Extensions if they are present
         ByteArrayOutputStream extensionBaos = new ByteArrayOutputStream();
-        while (hasExtension) {
+        while (hasPlaintextExtension) {
             int length = payload[msgOffset++];
             byte multiByte = payload[msgOffset++];
             bitSet = BitSet.valueOf(new byte[] { multiByte });
             boolean critical = bitSet.get(6);
-            hasExtension = bitSet.get(7); // More to follow
+            hasPlaintextExtension = bitSet.get(7); // More to follow
             int typebyte = multiByte & 0x3F;
             ZWaveS2EncapsulationExtensionType type = parse(typebyte);
+            logger.debug(
+                    "Parsing SECURITY_2_MESSAGE_ENCAPSULATION extension type={} typebyte={} length={} multiByte={} critical={} moreToFollow={}",
+                    type, typebyte, length, multiByte, critical, hasPlaintextExtension);
+            if (type == null) {
+                logger.error(
+                        "Error parsing SECURITY_2_MESSAGE_ENCAPSULATION: could not determine extension type from typebyte="
+                                + typebyte);
+                return Collections.emptyMap();
+            }
             if (type.isEncrypted()) {
                 logger.warn(
                         "Encapsulation Extension Type {} should have been encrypted, but wasn't.  Encapsulation extension ignored.",
@@ -448,16 +463,24 @@ public class CommandClassSecurity2V1 {
         int encryptedLength = payload.length - msgOffset;
         byte[] encryptedBytes = new byte[encryptedLength];
         System.arraycopy(payload, msgOffset, encryptedBytes, 0, encryptedLength);
-        responseTable.put("ENCRYPTED_BYTES", hasEncryptedExtension);
+        responseTable.put("ENCRYPTED_BYTES", encryptedBytes);
         return responseTable;
     }
 
     // TODO: move this to a test case, test each enu
     public static void main(String[] args) {
         try {
-            byte check = 0;
-            int here = check & 0x1;
-            System.out.println(here == 1);
+            // List list = parseBitMask((byte) 1, ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);
+            byte multiByte = 65;
+            BitSet bitSet = BitSet.valueOf(new byte[] { multiByte });
+            boolean critical = bitSet.get(6);
+            boolean hasPlaintextExtension = bitSet.get(7); // More to follow
+            int typebyte = multiByte & 0x3F;
+            ZWaveS2EncapsulationExtensionType type = parse(typebyte);
+            System.out.println(type);
+            // byte check = 0;
+            // int here = check & 0x1;
+            // System.out.println(here == 1);
             // List<ZWaveS2ECDHProfile> listEcdhProfileList = parseBitMask((byte) 255, ZWaveS2ECDHProfile.class,
             // ZWaveS2ECDHProfile.class);
             // System.out.println(listEcdhProfileList);
@@ -509,7 +532,7 @@ public class CommandClassSecurity2V1 {
             if (set) {
                 B enumValue = (B) bitMaskLookupTable.get(i);
                 if (enumValue == null) {
-                    logger.error("Unsupported bit set on {} at position {} for byte {}", enumClass, i,
+                    logger.error("Unsupported bit set on {} at position {} for byte 0x{}", enumClass.getSimpleName(), i,
                             String.format("%02X ", toParse));
                 } else {
                     parsedList.add(enumValue);

@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 public class ZWaveCryptoOperations {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperations.class);
 
-    public static final byte RNG_ENTROPY_BYTE_COUNT = 32;
+    public static final byte RNG_ENTROPY_BYTE_LENGTH = 32;
     public static final int NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS = 128;
 
     /*
@@ -57,7 +57,6 @@ public class ZWaveCryptoOperations {
     // per CC:009F.01.00.11.00F
     private static final byte[] SPAN_PERSONALIZATION_STRING = "PersonalizationString".getBytes(StandardCharsets.UTF_8);
     // per CC:009F.01.00.11.016
-    private static final byte[] PRNG_PERSONALIZATION_STRING = new byte[32];
     private static final byte[] NONCE_NONE = new byte[0];
 
     /**
@@ -104,10 +103,9 @@ public class ZWaveCryptoOperations {
         this.prng = prng;
     }
 
-    public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes,
-            int nodeIdForLogging) throws ZWaveCryptoException {
-        return diffieHellmanProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes,
-                nodeIdForLogging);
+    public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes)
+            throws ZWaveCryptoException {
+        return diffieHellmanProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes, prng);
     }
 
     /**
