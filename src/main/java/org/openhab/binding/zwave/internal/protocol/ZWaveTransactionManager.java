@@ -12,12 +12,15 @@
  */
 package org.openhab.binding.zwave.internal.protocol;
 
+import static org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass.CommandClass.*;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -32,6 +35,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.lang3.NotImplementedException;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.zwave.internal.protocol.SerialMessage.SerialMessageClass;
 import org.openhab.binding.zwave.internal.protocol.SerialMessage.SerialMessageType;
@@ -39,6 +43,8 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionP
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransaction.TransactionState;
 import org.openhab.binding.zwave.internal.protocol.ZWaveTransactionResponse.State;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveCommandClass.CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2CommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveWakeUpCommandClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.ZWaveCommandProcessor;
@@ -911,42 +917,60 @@ public class ZWaveTransactionManager {
                 return;
             }
 
-            SerialMessage serialMessage;
-            // If this requires security, then check if we have a NONCE
+            SerialMessage serialMessage = null;
+            ZWaveNode node = controller.getNode(transaction.getNodeId());
+            ZWaveSecurityCommandClass securityEncapsulationCommand = null; // Will be set if security is needed
+
             if (transaction.getRequiresSecurity()) {
-                logger.trace("NODE {}: Transaction requires security", transaction.getNodeId());
-                ZWaveNode node = controller.getNode(transaction.getNodeId());
-                ZWaveSecurityCommandClass securityCommandClass = (ZWaveSecurityCommandClass) node
-                        .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
-                if (securityCommandClass == null) {
-                    logger.debug("NODE {}: COMMAND_CLASS_SECURITY not found.", transaction.getNodeId());
+                Set<CommandClass> securityCommandClasses = node.getSecurityCommandClasses();
+                if (securityCommandClasses.contains(COMMAND_CLASS_SECURITY_2)) {
+                    securityEncapsulationCommand = (ZWaveSecurity2CommandClass) node
+                            .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+
+                    securityEncapsulationCommand = new ZWaveSecurity2CommandClass(node, controller, null);
+                } else if (securityCommandClasses.contains(COMMAND_CLASS_SECURITY)) {
+                    securityEncapsulationCommand = (ZWaveSecurity0CommandClass) node
+                            .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
+                }
+                if (securityEncapsulationCommand == null) {
+                    logger.error(
+                            "NODE {}: transaction required security but COMMAND_CLASS_SECURITY and COMMAND_CLASS_SECURITY_2 were not found.",
+                            transaction.getNodeId());
                     return;
                 }
-
-                if (securityCommandClass.isNonceAvailable()) {
+                String abbreviation = securityEncapsulationCommand.getAbbreviation();
+                logger.trace("NODE {}: Transaction requires {}  encapsulation", transaction.getNodeId(), abbreviation);
+                // Check if we have a NONCE
+                if (securityEncapsulationCommand.isNonceAvailable()) {
                     // We have a NONCE, so encapsulate and send
-                    logger.trace("NODE {}: NONCE available so encap and send.", transaction.getNodeId());
+                    logger.trace("NODE {}: NONCE available so {} encap and send.", transaction.getNodeId(),
+                            abbreviation);
+                    throw new NotImplementedException("TODO"); // TODO: we need to do something here?
 
-                    ZWaveCommandClassTransactionPayload securePayload = new ZWaveCommandClassTransactionPayload(
-                            transaction.getNodeId(),
-                            securityCommandClass.getSecurityMessageEncapsulation(transaction.getPayloadBuffer()),
-                            TransactionPriority.RealTime, transaction.getExpectedCommandClass(),
-                            transaction.getExpectedCommandClassCommand());
-
-                    // Get the serial message for the secure message and add it to our transaction so it correlates
-                    // properly
-                    serialMessage = securePayload.getSerialMessage();
-                    transaction.setSerialMessage(serialMessage);
                 } else {
                     // Request a nonce - create a temporary transaction
-                    // We keep a reference to the original transaction so that if the nonce transaction fails, then we
-                    // fail the real transaction and let the application deal with retries.
-                    transaction = new ZWaveSecureTransaction(transaction, securityCommandClass.getSecurityNonceGet());
+                    // We keep a reference to the original transaction so that if the nonce transaction fails, then
+                    // we fail the real transaction and let the application deal with retries.
+                    transaction = new ZWaveSecureTransaction(transaction,
+                            securityEncapsulationCommand.buildSecurityNonceGet());
                     serialMessage = transaction.getSerialMessage();
                 }
+
             } else {
                 logger.trace("getTransactionToSend 6");
                 serialMessage = transaction.getSerialMessage();
+            }
+
+            if (securityEncapsulationCommand != null) {
+                ZWaveCommandClassTransactionPayload securePayload = new ZWaveCommandClassTransactionPayload(
+                        transaction.getNodeId(),
+                        securityEncapsulationCommand.securelyEncapsulateTransaction(transaction.getPayloadBuffer()),
+                        TransactionPriority.RealTime, transaction.getExpectedCommandClass(),
+                        transaction.getExpectedCommandClassCommand());
+                // Get the serial message for the secure message and add it to our transaction so it correlates
+                // properly
+                serialMessage = securePayload.getSerialMessage();
+                transaction.setSerialMessage(serialMessage);
             }
 
             // Add this message to the outstandingTransactions list
@@ -1239,6 +1263,7 @@ public class ZWaveTransactionManager {
 
         private int threadCounter = 0;
 
+        @Override
         public Thread newThread(Runnable r) {
             return new Thread(r, "ZWaveTransactionManager-" + (threadCounter++));
         }

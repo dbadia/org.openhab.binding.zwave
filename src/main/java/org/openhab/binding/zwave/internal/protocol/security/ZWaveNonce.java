@@ -16,10 +16,13 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
+import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
+
 /**
- * Class to represent a one-use token.
+ * Class to represent a one-use token used for S0 security
  * This class holds the number, and timeout for the NONCE.
- * 
+ *
+ * @see CommandClassSecurityV1
  * @author Chris Jackson - Initial contribution
  *
  */

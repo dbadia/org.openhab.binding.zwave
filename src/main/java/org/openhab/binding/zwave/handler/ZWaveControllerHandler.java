@@ -26,6 +26,9 @@ import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.eclipse.jdt.annotation.NonNull;
 import org.openhab.binding.zwave.ZWaveBindingConstants;
 import org.openhab.binding.zwave.internal.protocol.SerialMessage;
@@ -34,9 +37,14 @@ import org.openhab.binding.zwave.internal.protocol.ZWaveDeviceClass.Specific;
 import org.openhab.binding.zwave.internal.protocol.ZWaveEventListener;
 import org.openhab.binding.zwave.internal.protocol.ZWaveIoHandler;
 import org.openhab.binding.zwave.internal.protocol.ZWaveNode;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveNetworkStateEvent;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperations;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.config.core.validation.ConfigValidationException;
@@ -58,7 +66,7 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class ZWaveControllerHandler extends BaseBridgeHandler implements ZWaveEventListener, ZWaveIoHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(ZWaveControllerHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(ZWaveControllerHandler.class);
 
     private volatile ZWaveController controller;
 
@@ -66,7 +74,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
 
     private Boolean isMaster;
     private Integer sucNode;
-    private String networkKey;
+
     private Integer secureInclusionMode;
     private Integer healTime;
     private Integer wakeupDefaultPeriod;
@@ -78,6 +86,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
     private int searchTime;
 
     private ScheduledFuture<?> healJob = null;
+    private ZWaveSecurityNetworkKeys networkSecurityKeys;
 
     public ZWaveControllerHandler(@NonNull Bridge bridge) {
         super(bridge);
@@ -132,31 +141,31 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             sucNode = 0;
         }
 
-        param = getConfig().get(CONFIGURATION_NETWORKKEY);
-        if (param instanceof String) {
-            networkKey = (String) param;
+        // Network security keys
+        networkSecurityKeys = new ZWaveSecurityNetworkKeys();
+        for (ZWaveKeyType networkKeyType : ZWaveKeyType.valuesWeakestToStrongest(false)) {
+            String networkKeyHex = null;
+            param = getConfig().get(networkKeyType.getControllerConstantName());
+            if (param instanceof String) {
+                networkKeyHex = (String) param;
+            }
+            if (networkKeyHex != null && networkKeyHex.length() > 0) {
+                // Sanity check the key data
+                // NOTE: if the data is bad, some sort of runtime error will be thrown
+                // This is good as init will halt and we will have to debug this situation
+                // We don't regenerate keys automatically as they may have been distributed already
+                byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(networkKeyHex);
+                SecretKey networkKey = new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES);
+                // Key is good, add it to the table
+                networkSecurityKeys.addKey(networkKeyType, networkKey);
+            }
         }
-        if (networkKey.length() == 0) {
-            logger.debug("No network key set by user - using random value.");
 
-            // Create random network key
-            networkKey = "";
-            for (int cnt = 0; cnt < 16; cnt++) {
-                int value = (int) Math.floor((Math.random() * 255));
-                if (cnt != 0) {
-                    networkKey += " ";
-                }
-                networkKey += String.format("%02X", value);
-            }
-            // Persist the value
-            Configuration configuration = editConfiguration();
-            configuration.put(ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, networkKey);
-            try {
-                // If the thing is defined statically, then this will fail and we will never start!
-                updateConfiguration(configuration);
-            } catch (IllegalStateException e) {
-                // Eat it...
-            }
+        // Init Crypto if it hasn't been done yet
+        if (ZWaveCryptoOperationsFactory.isInitialized() == false) {
+            // Crypto init is slow on some platforms so run it in the background
+            Thread cryptoInitThread = new CryptoInitThread(networkSecurityKeys);
+            cryptoInitThread.start();
         }
 
         param = getConfig().get(CONFIGURATION_HEALTIME);
@@ -183,12 +192,10 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
         config.put("masterController", isMaster.toString());
         config.put("sucNode", sucNode.toString());
         config.put("secureInclusion", secureInclusionMode.toString());
-        config.put("networkKey", networkKey);
         config.put("wakeupDefaultPeriod", wakeupDefaultPeriod.toString());
         config.put("maxAwakePeriod", maxAwakePeriod.toString());
 
-        // TODO: Handle soft reset?
-        controller = new ZWaveController(this, config);
+        controller = new ZWaveController(this, config, networkSecurityKeys);
         controller.addEventListener(this);
 
         // Add any listeners that were registered before the manager was registered
@@ -343,29 +350,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             }
             if ("security".equals(cfg[0])) {
                 if (cfg[1].equals("networkkey")) {
-                    // Format the key here so it's presented nicely and consistently to the user!
-                    String hexString = (String) value;
-                    hexString = hexString.replace("0x", "");
-                    hexString = hexString.replace(",", "");
-                    hexString = hexString.replace(" ", "");
-                    hexString = hexString.toUpperCase();
-                    if ((hexString.length() % 2) != 0) {
-                        hexString += "0";
-                    }
-
-                    int arrayLength = (int) Math.ceil(((hexString.length() / 2)));
-                    String[] result = new String[arrayLength];
-
-                    int j = 0;
-                    StringBuilder builder = new StringBuilder();
-                    int lastIndex = result.length - 1;
-                    for (int i = 0; i < lastIndex; i++) {
-                        builder.append(hexString.substring(j, j + 2) + " ");
-                        j += 2;
-                    }
-                    builder.append(hexString.substring(j));
-                    value = builder.toString();
-
+                    value = formatKey((String) value);
                     reinitialise = true;
                 }
             }
@@ -389,6 +374,33 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             dispose();
             initialize();
         }
+    }
+
+    /**
+     * Format the key here so it's presented nicely and consistently to the user!
+     */
+    private static String formatKey(String value) {
+        String hexString = value;
+        hexString = hexString.replace("0x", "");
+        hexString = hexString.replace(",", "");
+        hexString = hexString.replace(" ", "");
+        hexString = hexString.toUpperCase();
+        if ((hexString.length() % 2) != 0) {
+            hexString += "0";
+        }
+
+        int arrayLength = (int) Math.ceil(((hexString.length() / 2)));
+        String[] result = new String[arrayLength];
+
+        int j = 0;
+        StringBuilder builder = new StringBuilder();
+        int lastIndex = result.length - 1;
+        for (int i = 0; i < lastIndex; i++) {
+            builder.append(hexString.substring(j, j + 2) + " ");
+            j += 2;
+        }
+        builder.append(hexString.substring(j));
+        return builder.toString();
     }
 
     @Override
@@ -613,4 +625,63 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
     public int getHomeId() {
         return controller.getHomeId();
     }
+
+    private class CryptoInitThread extends Thread {
+        private ZWaveSecurityNetworkKeys networkSecurityKeys;
+
+        private CryptoInitThread(ZWaveSecurityNetworkKeys networkSecurityKeys) {
+            super("ZWaveNetworkKeyGenerateThread");
+            this.networkSecurityKeys = networkSecurityKeys;
+        }
+
+        @Override
+        public void run() {
+            // ZWaveCryptoOperationsFactory.initFromConfig() can be slow as the spec very specific about how entropy is
+            // gathered and how keys are to be generated (rightfully so as these keys will typically be used for many
+            // years) see CC:009F.01.00.11.015
+            // ZWaveCryptoOperationsFactory.initFromConfig() is slow as it requires entropy gathering
+            // and will block until that is complete
+            ZWaveCryptoOperationsFactory.initFromConfig(networkSecurityKeys);
+            ZWaveCryptoOperations cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
+            for (ZWaveKeyType networkKeyType : networkSecurityKeys.missingKeys()) {
+                try {
+                    byte[] networkKeyBytes = generateNetworkAesKey(cryptoOperations, networkKeyType,
+                            ZWaveCryptoOperations.NETWORK_SECURITY_AES_KEY_SIZE_IN_BITS);
+                    SecretKey networkKey = new SecretKeySpec(networkKeyBytes, ZWaveSecurity0CommandClass.AES);
+                    // The key is useless if we can't save it. Persist, then set
+                    Configuration configuration = editConfiguration();
+                    configuration.put(networkKeyType.getControllerConstantName(), keyToHex(networkKeyBytes));
+                    updateConfiguration(configuration);
+                    // Key persisted, set it for usage
+                    networkSecurityKeys.addKey(networkKeyType, networkKey);
+                    logger.debug("Generated new key for {}", networkKeyType);
+                } catch (RuntimeException e) {
+                    logger.error("Error during key generation or storage for {}.  Key will be unusable",
+                            networkKeyType);
+                }
+            }
+        }
+
+        private byte[] generateNetworkAesKey(ZWaveCryptoOperations cryptoOperations, ZWaveKeyType networkKeyType,
+                int sizeInBits) {
+            logger.debug("No network key found for {} - generating", networkKeyType);
+            long startTime = System.nanoTime();
+            // CC:009F.01.00.11.015 The PRNG MUST be used for:
+            // Generating new network keys when provisioning a new network
+            byte[] keyBytes = new byte[sizeInBits / 8];
+            cryptoOperations.fillFromPrng(keyBytes);
+            logger.debug("{} key generation took {}ms", networkKeyType,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime));
+            return keyBytes;
+        }
+
+        private String keyToHex(byte[] keyBytes) {
+            StringBuilder buf = new StringBuilder();
+            for (byte aByte : keyBytes) {
+                buf.append(String.format("%02X ", aByte));
+            }
+            return buf.toString().trim();
+        }
+    }
+
 }
