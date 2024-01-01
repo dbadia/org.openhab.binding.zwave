@@ -12,6 +12,9 @@
  */
 package org.openhab.binding.zwave.internal.protocol.initialization;
 
+import static org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType.*;
+
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -20,11 +23,15 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 import org.openhab.binding.zwave.ZWaveBindingConstants;
 import org.openhab.binding.zwave.internal.ZWaveConfigProvider;
+import org.openhab.binding.zwave.internal.protocol.SerialMessage;
 import org.openhab.binding.zwave.internal.protocol.ZWaveAssociation;
 import org.openhab.binding.zwave.internal.protocol.ZWaveAssociationGroup;
 import org.openhab.binding.zwave.internal.protocol.ZWaveController;
@@ -45,12 +52,22 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveManufacture
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiAssociationCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveMultiInstanceCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveNoOperationCommandClass;
-import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurityCommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2CommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveVersionCommandClass;
 import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveWakeUpCommandClass;
+import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurity2V1;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInclusionEvent;
 import org.openhab.binding.zwave.internal.protocol.event.ZWaveInitializationStateEvent;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveKexData;
+import org.openhab.binding.zwave.internal.protocol.security.ZWaveProtocolViolationException;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2DskDigitInputMethod;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType;
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.AssignSucReturnRouteMessageClass;
 import org.openhab.binding.zwave.internal.protocol.serialmessage.DeleteReturnRouteMessageClass;
@@ -123,14 +140,14 @@ public class ZWaveNodeInitStageAdvancer {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveNodeInitStageAdvancer.class);
 
     private static final ZWaveNodeSerializer nodeSerializer = new ZWaveNodeSerializer();
+    private static final long INCLUSION_TIMER_20_SEC_NANOS = TimeUnit.SECONDS.toNanos(20);
+    private static final long INCLUSION_TIMER_20_SEC_NANOS_OLD = 20000000000L; // TODO: revert of delete
 
     private final ZWaveNode node;
     private final ZWaveController controller;
     private boolean restoredFromConfigfile = false;
 
     private Thread initialisationThread;
-
-    private final long INCLUSION_TIMER = 20000000000L;
 
     private boolean initRunning = true;
 
@@ -177,7 +194,7 @@ public class ZWaveNodeInitStageAdvancer {
             @Override
             public void run() {
                 try {
-                    if (node.getInclusionTimer() < INCLUSION_TIMER) {
+                    if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
                         logger.debug("NODE {}: Node advancer: Node just included ({})", node.getNodeId(),
                                 node.getInclusionTimer());
                         doInitialInclusionStages();
@@ -269,7 +286,6 @@ public class ZWaveNodeInitStageAdvancer {
         if (transaction == null) {
             return false;
         }
-
         // Remember the start time
         long timerStart = System.nanoTime();
 
@@ -282,6 +298,7 @@ public class ZWaveNodeInitStageAdvancer {
             if (timeout > 0 && System.nanoTime() - timerStart > timeout) {
                 logger.debug("NODE {}: timed out after {} / {}", node.getNodeId(), System.nanoTime() - timerStart,
                         timeout);
+                new Exception("debug timeout").printStackTrace(); // TODO: remoev
                 return false;
             }
 
@@ -381,6 +398,7 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
+        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.INIT_NEIGHBORS);
 
         // logger.debug("NODE {}: Node advancer: INIT_NEIGHBORS - send RoutingInfo", node.getNodeId());
@@ -411,6 +429,7 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
+        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.FAILED_CHECK);
         // processTransaction(new IsFailedNodeMessageClass().doRequest(node.getNodeId()));
         // if (initRunning == false) {
@@ -470,15 +489,30 @@ public class ZWaveNodeInitStageAdvancer {
         setCurrentStage(ZWaveNodeInitStage.SECURITY_REPORT);
 
         // Does this node support security
-        ZWaveSecurityCommandClass securityCommandClass = (ZWaveSecurityCommandClass) node
+        ZWaveSecurity0CommandClass securityCommandClass = (ZWaveSecurity0CommandClass) node
                 .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
-        if (securityCommandClass == null) {
-            logger.debug("NODE {}: SECURE command class not supported", node.getNodeId());
+        ZWaveSecurity2CommandClass security2CommandClass = (ZWaveSecurity2CommandClass) node
+                .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+
+        // Prefer SECURITY2 over SECURITY0
+        if (security2CommandClass != null) {
+            security2CommandClass.setIsPairing(true);
+            doSecureS2Stages(security2CommandClass);
+        } else if (securityCommandClass != null) {
+            doSecureS0Stages(securityCommandClass);
+        } else {
+            logger.debug("NODE {}: SECURE command classes not supported", node.getNodeId());
             return;
         }
 
+    }
+
+    /**
+     * Execute the security handshake as defined by S0
+     */
+    private void doSecureS0Stages(ZWaveSecurity0CommandClass securityCommandClass) {
         // Add the network key to the security class
-        securityCommandClass.setNetworkKey(controller.getSecurityKey());
+        securityCommandClass.setNetworkKeys(controller.getSecurityKeys());
 
         // Check if we want to perform a secure inclusion...
         boolean doSecureInclusion = false;
@@ -505,13 +539,14 @@ public class ZWaveNodeInitStageAdvancer {
         }
 
         // Check if this node was just included (within the last 10 seconds or so)
-        if (node.getInclusionTimer() < INCLUSION_TIMER) {
+        if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
             logger.debug("NODE {}: Performing secure inclusion.", node.getNodeId());
 
             // Get the scheme used for the remote
             logger.debug("NODE {}: SECURITY_INC State=GET_SCHEME", node.getNodeId());
-            if (processTransaction(securityCommandClass.getSecuritySchemeGetMessage(), INCLUSION_TIMER, 3) == false) {
-                // Notify that secure inclusion failed
+            if (processTransaction(securityCommandClass.getSecuritySchemeGetMessage(), INCLUSION_TIMER_20_SEC_NANOS,
+                    3) == false) {
+
                 controller.notifyEventListeners(
                         new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
                 logger.info("NODE {}: SECURITY_INC State=FAILED, Reason=GET_SCHEME", node.getNodeId());
@@ -524,13 +559,14 @@ public class ZWaveNodeInitStageAdvancer {
 
             // Set the key
             logger.debug("NODE {}: SECURITY_INC State=SET_KEY", node.getNodeId());
-            if (processTransaction(securityCommandClass.getSetSecurityKeyMessage(), INCLUSION_TIMER, 3) == true) {
+            if (processTransaction(securityCommandClass.getSetSecurityKeyMessage(), INCLUSION_TIMER_20_SEC_NANOS,
+                    3) == true) {
                 // Notify that secure inclusion completed ok
                 controller.notifyEventListeners(
                         new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeComplete, node.getNodeId()));
                 logger.info("NODE {}: SECURITY_INC State=COMPLETE", node.getNodeId());
             } else {
-                // Notify that secure inclusion failed
+
                 controller.notifyEventListeners(
                         new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
                 logger.info("NODE {}: SECURITY_INC State=FAILED, Reason=SET_KEY", node.getNodeId());
@@ -548,7 +584,7 @@ public class ZWaveNodeInitStageAdvancer {
         // We do three tries - if it doesn't respond, and we get the ACK from the device, then we assume the node wasn't
         // securely included
         logger.debug("NODE {}: SECURITY_INC State=SECURE_PING", node.getNodeId());
-        if (processTransaction(securityCommandClass.getSecurityNonceGet(), 0, 3) == false) {
+        if (processTransaction(securityCommandClass.buildSecurityNonceGet(), 0, 3) == false) {
             logger.info("NODE {}: SECURITY_INC State=FAILED, Reason=SECURE_PING", node.getNodeId());
             return;
         }
@@ -565,6 +601,499 @@ public class ZWaveNodeInitStageAdvancer {
         if (initRunning == false) {
             return;
         }
+    }
+
+    /**
+     * Execute the security handshake as defined by S2.
+     *
+     */
+    private void doSecureS2Stages(ZWaveSecurity2CommandClass security2CommandClass) {
+        /*
+         * In the rest of this method, the term "Step" is in direct reference to the ZWave Spec:
+         * CC:009F.01.00.11.056 The key exchange MUST comply with the following steps
+         *
+         * Node A = controller, Node B = joining S2 compliant node
+         */
+        try {
+            // Check if this node was just included (within the last 10 seconds or so)
+            if (node.getInclusionTimer() < INCLUSION_TIMER_20_SEC_NANOS) {
+                logger.debug("NODE {}: Performing secure S2 inclusion.", node.getNodeId());
+                // Step 1. Network inclusion completed: Immediately following a successful network inclusion or after
+                // receiving an Inclusion Controller Initiate Command (refer to [16]), the Security 2 enabled controller
+                // A MUST start the S2 bootstrapping see CC:009F.01.00.11.057
+
+                // @formatter:off
+                /*
+                 * *********** Inclusion Part A: Create a shared secret between Node A and Node B *******
+                 *
+                 * Both nodes calculate a shared secret based on an Authenticated Elliptic Curve Diffie Hellman key
+                 * exchange (AuthECDH). Node A takes as input the Public Key of B, KeyPub_B and its own Private Key,
+                 * KeyPriv_A. Node B takes as input the Public Key of A, KeyPub_A and its own Private Key, KeyPriv_B.
+                 * Both returning the same ECDH Shared Secret.
+                 *      o AuthECDH is based on ECDH using Curve25519 [28]. Authentication is achieved through
+                 */
+                // @formatter:on
+
+                // Step 2. A->B : KEX Get : Including Node A, requests KEX Report from Joining Node B
+                // see CC:009F.01.00.11.057
+                logger.debug("NODE {}: SECURITY_2_INC State=KEX_GET", node.getNodeId());
+                if (processTransaction(security2CommandClass.buildKexGetMessage(), INCLUSION_TIMER_20_SEC_NANOS,
+                        3) == false) {
+                    security2TimeoutOccurred("KEX_GET");
+                    return;
+                }
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    haltS2Pairing(security2CommandClass);
+                    return;
+                }
+
+                // Step 3. B->A : KEX Report : Sent as response to the KEX Get command
+                // see CC:009F.01.00.11.05
+                ZWaveKexData kexReportData = security2CommandClass.waitForKexReportFromNode(TimeUnit.NANOSECONDS,
+                        INCLUSION_TIMER_20_SEC_NANOS);
+                if (kexReportData == null) {
+                    logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_REPORT_NOT_RECEIVED",
+                            node.getNodeId());
+                    haltS2Pairing(security2CommandClass);
+                    return;
+                }
+                logger.debug("NODE {}: SECURITY_2_INC kexReportData={}", node.getNodeId(), kexReportData);
+
+                // Step 4. A1 : Node A MUST verify the KEX Report and, if required, cancel the S2 bootstrapping as
+                // described in Section 3.6.6.4.1
+                // see CC:009F.01.00.11.058
+                // --> takes place in ZWaveSecurity2CommandClass#handleSecurity2KexReport
+
+                // Kickoff temporary ECDH exchange key generation in the background for this node
+                security2CommandClass.generateS2TempExchangeKeyInBackground();
+
+                List<ZWaveKeyType> requestedKeysList = kexReportData.getKeyTypeList();
+                // requestedKeysList has at least one key in it per ZWaveSecurity2CommandClass#validateKexReport
+                if (kexReportData.getKeyTypeList().size() == 1
+                        && ZWaveKeyType.S0 == kexReportData.getKeyTypeList().get(0)) {
+                    // S0 is disabled in code as it's untested. Log a message asking whoever has this device to contact
+                    // us
+                    logger.error(
+                            "NODE {}: SECURITY_2_INC State=FAILED, Reason=ONLY_S0_SUPPORTED contact zwave dev team with device info for testing",
+                            node.getNodeId());
+                    haltS2Pairing(security2CommandClass);
+                    // call doSecureS0Stages(securityCommandClass); if we can find a device that supports it:
+                    return;
+                }
+
+                // Step 4a. Optional: Node A MAY present a dialog allowing the installer to select which specific keys
+                // will be granted to Node B
+                // see CC:009F.01.00.13.007
+                // --> This is not implemented, see class level javadoc of ZWaveSecurity2CommandClass for justification
+
+                if (kexReportData.isClientSideAuthentication()) {
+                    // Step 4b. If Client-Side authentication is requested, Node A MUST present a dialog asking if
+                    // Client-Side authentication should be allowed
+                    // see CC:009F.01.00.11.05A
+                    // --> CSA is not implemented, as there are currently no devices which support CSA
+                    // --> instead we reject it:
+                    // Step 4b ii. Node A MAY reject Client-Side authentication. In this case, Node A MUST either abort
+                    // the
+                    // S2 bootstrapping with a KEX_FAIL_CANCEL or only grant a subset of keys that does not require CSA,
+                    // e.g. Security 0 and Unauthenticated.
+                    // see CC:009F.01.00.13.016
+                    requestedKeysList.removeIf(k -> k.isRequiredToSupportCsaWhenRequestedByNode());
+                    if (requestedKeysList.isEmpty()) {
+                        logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ALL_KEY_REQUIRE_CSA",
+                                node.getNodeId());
+                        haltS2Pairing(security2CommandClass, KEX_FAIL_CANCEL);
+                        return;
+                    } else {
+                        // only grant a subset of keys that does not require CSA, e.g. Security 0 and Unauthenticated.
+                        // --> continue below
+                    }
+                }
+
+                // TODO: Node A MAY reject Client-Side authentication. In this case, Node A MUST either abort the S2
+                // bootstrapping with a KEX_FAIL_CANCEL or only grant a subset of keys that does not require CSA, e.g.
+                // Security 0 and Unauthenticated.
+
+                // The item below is optional and is not implemented - we don't ask for approval from the installer, we
+                // auto-approve
+                // CC:009F.01.00.13.007 Node A MAY present a dialog allowing the installer to select which specific keys
+                // will be granted to Node B. If presented, the installer MUST either confirm a list of granted keys or
+                // cancel the security bootstrapping
+
+                // CC:009F.01.00.13.008 The KEX Set Command contains parameters selected by Node A. The list of class
+                // keys MAY be reduced to a subset of the list that was requested in the previous KEX Report from Node
+                // B. We send all requested keys
+                List<ZWaveKeyType> grantedKeysList = security2CommandClass.buildKeysToSendList(requestedKeysList);
+
+                // Step 5. A->B : KEX Set The KEX Set Command contains parameters selected by Node A. The list of class
+                // keys MAY be reduced to a subset of the list that was requested in the previous KEX Report from Node B
+                // see CC:009F.01.00.13.008
+
+                // TODO: update all timers to real values
+                long startTime = System.currentTimeMillis();
+                boolean allowCsa = false; // we don't support CSA
+                ZWaveS2KexScheme selectedKexScheme = ZWaveS2KexScheme._1;
+                ZWaveS2ECDHProfile selectedEcdhProfile = ZWaveS2ECDHProfile.Curve25519;
+                logger.debug("NODE {}: SECURITY_2_INC State=KEX_SET", node.getNodeId());
+                ZWaveKexData kexSetData = new ZWaveKexData(allowCsa, selectedKexScheme, selectedEcdhProfile,
+                        grantedKeysList);
+                if (processTransaction(security2CommandClass.buildKexSetMessageForInitialKeyExchange(kexSetData),
+                        INCLUSION_TIMER_20_SEC_NANOS, 3) == false) {
+                    security2TimeoutOccurred("PUBLIC_KEY_REPORT");
+                    return;
+                }
+                //
+                long elapsedRoundtripTimeMillis = System.currentTimeMillis() - startTime;
+
+                // Step 6. is executed on the joining node
+                // see CC:009F.01.00.11.05D
+
+                // Step 7. B->A : Public Key B : Public Key B is the Elliptic Curve Public Key of Node B and is used for
+                // the ECDH Key Exchange. If authentication is used, the DSK bytes 1..2 MUST be obfuscated by zeros
+                // see CC:009F.01.00.11.0A7
+
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    haltS2Pairing(security2CommandClass);
+                    return;
+                }
+
+                byte[] deviceEcdhPublicKeyBytes = security2CommandClass.getDeviceEcdhPublicKeyBytes();
+                if (deviceEcdhPublicKeyBytes.length != selectedEcdhProfile.getPublicKeyLengthInBytes()) {
+                    logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_DEVICE_PUB_INVALID_LENGTH {}",
+                            node.getNodeId(), deviceEcdhPublicKeyBytes.length);
+                    haltS2Pairing(security2CommandClass, KEX_FAIL_DSK);
+                    return;
+                }
+
+                // BEGIN Device authentication logic
+                if (grantedKeysList.stream().anyMatch(t -> t.isAuthenticated())) {
+                    // Step 8. A2: If authentication is required, Node A MUST request that the user enters the PIN code
+                    // or scans the QR code from Node B in order to verify the DSK (refer to 3.6.6.2 and 3.6.6.4.1)
+                    // see CC:009F.01.00.11.05F
+
+                    // TODO: prompt the "operator" (user) to enter the 1st 5 digits from the device or scan QR code.
+                    // Ours is 45683
+                    // TODO: NEED_UI
+                    ZWaveS2DskDigitInputMethod inputMethod = ZWaveS2DskDigitInputMethod.MANUAL;
+                    byte[] dskBytesFromOperator = new byte[] { (byte) 4, (byte) 5, (byte) 6, (byte) 8, (byte) 3 };
+
+                    if (inputMethod == ZWaveS2DskDigitInputMethod.MANUAL) {
+                        // CC:009F.01.00.11.0A7 If authentication is used, the DSK bytes 1..2 MUST be obfuscated by
+                        // zeros.
+
+                        // Step 8 A2: a. If Node A was input a PIN code, it MUST substitute the bytes 1 and 2 of the
+                        // Node B public key with the 2 bytes received in the PIN code
+                        // see CC:009F.01.00.11.05F
+                        deviceEcdhPublicKeyBytes[0] = dskBytesFromOperator[0];
+                        deviceEcdhPublicKeyBytes[1] = dskBytesFromOperator[1];
+
+                        // Check that bytes 3 - 5 match
+                        for (int i = 2; i < dskBytesFromOperator.length; i++) {
+                            if (dskBytesFromOperator[i] != deviceEcdhPublicKeyBytes[i]) {
+                                logger.debug("NODE {}: SECURITY_2_INC dskBytesFromOperator=    {}", node.getNodeId(),
+                                        SerialMessage.bb2hex(dskBytesFromOperator));
+                                logger.debug("NODE {}: SECURITY_2_INC deviceEcdhPublicKeyBytes={}", node.getNodeId(),
+                                        SerialMessage.bb2hex(deviceEcdhPublicKeyBytes));
+                                controller.notifyEventListeners(new ZWaveInclusionEvent(
+                                        ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
+                                logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=KEX_FAIL_DSK",
+                                        node.getNodeId());
+                                haltS2Pairing(security2CommandClass, KEX_FAIL_DSK);
+                                return;
+                            }
+                        }
+
+                        // Step 8 A2: a. The user MUST be prompted a dialog to visually validate the bytes 3..16 of Node
+                        // B’s DSK.
+                        // see CC:009F.01.00.11.05F
+                        // TODO: NEED_UI
+                    } else if (inputMethod == ZWaveS2DskDigitInputMethod.QR_CODE) {
+                        // TODO: NEED_UI
+                        // TODO: scan the QR code
+
+                        // Step 8 A2: b. If Node A has received the 16 bytes DSK of Node B via QR scanning, it
+                        // MUST substitute the first 16 bytes of Node B’s Public Key with the 16 bytes received via QR
+                        // code.
+                        // see CC:009F.01.00.11.05F
+                        logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=QR_NOT_IMPLEMENTED",
+                                node.getNodeId());
+                        haltS2Pairing(security2CommandClass, KEX_FAIL_DSK);
+                        return;
+                    } else {
+                        logger.error("NODE {}: Unknown input method of {}", node.getNodeId(), inputMethod);
+
+                        controller.notifyEventListeners(
+                                new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
+                        logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=UNKNOWN_INPUT_METHOD",
+                                node.getNodeId());
+                        return;
+                    }
+                }
+
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
+
+                byte[] ourTempEcdhPublicKeyBytes = security2CommandClass.waitForS2TempKeyToFinishGenerating();
+                if (ourTempEcdhPublicKeyBytes.length != selectedEcdhProfile.getPublicKeyLengthInBytes()) {
+                    logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_GENERATED_PUB_INVALID_LENGTH {}",
+                            node.getNodeId(), ourTempEcdhPublicKeyBytes.length);
+                    haltS2Pairing(security2CommandClass, KEX_FAIL_DSK);
+                    return;
+                }
+                if (kexReportData.isClientSideAuthentication()) {
+                    // 9. A->B a. Mandatory: If Client-Side authentication is used, the DSK bytes 1..4 MUST be
+                    // obfuscated by zeros.
+                    // see CC:009F.01.00.11.060
+                    for (int i = 0; i < 4; i++) {
+                        ourTempEcdhPublicKeyBytes[i] = 0;
+                    }
+                }
+                // END Device authentication logic
+
+                // Send our public key to the device
+                // Step 9. A->B : Public Key A : Public Key A is the Elliptic Curve Public Key of Node A and will be
+                // used for
+                // the temporary ECDH Key
+                // see CC:009F.01.00.12.012
+                // Step 10. B2 is executed on the node device if necessary
+                // see CC:009F.01.00.11.061
+                logger.debug("NODE {}: SECURITY_2_INC State=PUBLIC_KEY_REPORT_SEND", node.getNodeId());
+                // CC:009F.01.01.11.002 A node sending this command MUST accept a delay up to <Previous Round-trip-time
+                // to peer node> + 250 ms before receiving the Security 2 Nonce Report Command.
+                // TODO: waitTimeNano ?
+                long waitTimeNano = TimeUnit.MILLISECONDS.toNanos(elapsedRoundtripTimeMillis + 250);
+                if (processTransaction(security2CommandClass.buildPublicKeyReportMessage(ourTempEcdhPublicKeyBytes),
+                        INCLUSION_TIMER_20_SEC_NANOS, 3) == false) {
+                    security2TimeoutOccurred("PUBLIC_KEY_REPORT");
+                    return;
+                }
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
+
+                // @formatter:off
+                /*
+                 * *********** Phase 2: Derive shared symmetric key for key exchange *******
+                 *
+                 * To establish a temporary Network Key for AES128-CCM and CTR_DRBG, two steps are needed:
+                 *      o To convert the ECDH Shared Secret into a 16-byte Pseudo Random Key (PRK). CKDF-TempExtract
+                 *          takes as input the ECDH Shared Secret along with KeyPub_A and KeyPub_B.
+                 *      o Temporary symmetric keys are derived based on CKDF-TempExpand, by giving the PRK, KeyPub_A and
+                 *          KeyPub_B as input. This returns the following keys:
+                 *              o Temporary CCM Key, combined Encryption and Authentication Key, denoted TempKeyCCM
+                 *              o Temporary Personalization String, denoted TempPersonalizationString.
+                 */
+                // @formatter:on
+
+                // Step 11. Elliptic Curve Shared Secret Established: If B2 is passed, Node A and Node B have performed
+                // an ECDH Key Exchange, resulting in an Elliptic Curve Shared Secret.
+
+                // Step 12. Temporary Symmetric Key Established: Both Node A and Node B derive a Temporary Symmetric Key
+                // from the ECDH Shared Secret based on CKDF-TempExpand (refer to 3.6.4.7.2).
+                // see CC:009F.01.00.11.061
+                security2CommandClass.generateTemporaryEncryptionKeys(deviceEcdhPublicKeyBytes);
+
+                // Step 13. B->A : Nonce Get : Node B requests a Nonce from Node A that will allow Node B to send
+                // messages securely using the Temporary Symmetric Key.
+                // -> Received NONCE_GET above, was command class able to queue the NONCE_REPORT?
+
+                // TODO: OLD delete
+                // Set the security2CommandClass on the node so messages will be encapsulated/encrypted from here on
+                // (Nonce Report is automatically exempt, so it is OK to enable even if we didn't receive NONCE_GET and
+                // respond with NONCE_REPORT yet)
+                // node.setSecurityCommandClass(security2CommandClass);
+
+                // Note that these is an inherit race condition where the node may have sent the encrypted KEX_REPORT
+                // before we enabled security, resulting in the message being dropped. The spec accounts for this by
+                // requiring the node to re-transmit the KEX_REPORT command see CC:009F.01.00.11.097
+
+                // Step 14. A->B : Nonce Report : A’s Nonce
+                if (security2CommandClass
+                        .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
+                    // TODO: LOW remove
+                    logger.error("============== DAVE is the waitForResponseToQueue logic working?");
+                    security2TimeoutOccurred("NONCE_GET");
+                    return;
+                }
+                logger.error("============== DAVE is the waitForResponseToQueue logic working?  YES IT IS");
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
+
+                // Step 15. From this point all frames sent between Node A and Node B MUST be encrypted using the
+                // ECDH Temporary Symmetric Key (With the exception of Nonce Get / Report for each Security Class which
+                // MUST NOT be encrypted and the Network Key Verify Command, which MUST be encrypted with the most
+                // recently exchanged key. Refer to Section 3.6.6.1). See CC:009F.01.00.11.062
+
+                // Step 16. B->A : KEX Set (echo) : The KEX Set command received from Node A in step 5 is confirmed via
+                // the temporary secure channel. See CC:009F.01.00.11.062
+
+                // Step 17. A3: Node A MUST abort S2 bootstrapping if the KEX Set(Echo) received in step 16 is not
+                // identical to KEX Set previously sent by Node A in step 5. Refer to Section 3.6.6.4.1.
+                // See CC:009F.01.00.11.063
+                if (security2CommandClass.waitForResponseToQueue(CommandClassSecurity2V1.KEX_REPORT) == false) {
+                    security2TimeoutOccurred("E(KEX_SET)");
+                    return;
+                }
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
+
+                // @formatter:off
+                /*
+                 * *********** Phase Step 3: Exchange permanent Network Keys *******
+                 *
+                 * Exchange permanent Network Keys To exchange one or several Permanent Network Key
+                 * (PNK), Singlecast Message Encapsulation is used with temporary symmetric derived keys (TempKeyCCM and
+                 * TempPersonalizationString).
+                 *      o All Permanent Network Key Exchanges are carried out using the temporary symmetric key.
+                 *      o All Permanent CCM Keys, KeyCCM, KeyMPAN and PersonalizationString, are derived from the
+                 *           corresponding PNK using CKDF-NetworkKeyExpand
+                 *      o All CKDF functions are based on AES128-CMAC
+                 */
+                // @formatter:on
+
+                // Step 15. From this point all frames sent between Node A and Node B MUST be encrypted using the ECDH
+                // Temporary Symmetric Key (With the exception of Nonce Get / Report for each Security Class which MUST
+                // NOT be encrypted and the Network Key Verify Command, which MUST be encrypted with the most recently
+                // exchanged key. Refer to Section 3.6.6.1).
+                // see CC:009F.01.00.11.062
+
+                // Step 16. B->A : KEX Set (echo) : The KEX Set command received from Node A in step 5 is confirmed
+                // via the temporary secure channel.
+                // --> confirmation is performed in ZWaveSecurity2CommandClass#handleKexSet
+
+                // Step 18. A->B : KEX Report (echo)
+                // --> send in ZWaveSecurity2CommandClass#handleKexSet
+                ZWaveKexData kexReportDataEncapsulated = security2CommandClass
+                        .waitForKexReportFromNode(TimeUnit.NANOSECONDS, INCLUSION_TIMER_20_SEC_NANOS);
+
+                // Did we receive Step 17 S2_MSG_ENCAP -> KEX_SET(Echo=1, granted keys) and reply with Step 18
+                // S2_MSG_ENCAP -> KEX_REPORT(Echo=1, requested keys) ?
+                if (security2CommandClass.waitForResponseToQueue(CommandClassSecurity2V1.KEX_REPORT) == false) {
+                    security2TimeoutOccurred("E(KEX_SET)");
+                    node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+                    return;
+                }
+
+                if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                    return;
+                }
+
+                // Authentication has been completed, and network key exchange begins. Steps 20 through 29 MUST be
+                // repeated for each network key Node A has granted. Key Exchange MUST follow the order described in
+                // Section 3.1.6.1
+                // see CC:009F.01.00.11.065
+
+                Iterator<ZWaveKeyType> grantedKeyIter = grantedKeysList.iterator();
+                while (grantedKeyIter.hasNext()) {
+
+                    // Step 20. B->A : Security 2 Network Key Get: Node B requests a specific Key from Node A
+                    // see CC:009F.01.00.11.066
+                    ZWaveKeyType keyBeingGranted = grantedKeyIter.next();
+
+                    // Step 22. Did we reply to NETWORK_KEY_GET with NETWORK_KEY_REPORT?
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NETWORK_KEY_REPORT) == false) {
+                        security2TimeoutOccurred("E(NETWORK_KEY_REPORT) " + keyBeingGranted);
+                        node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+                        return;
+                    }
+                    // Step 24. Node A and Node B are now in possession of a shared network key
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+
+                    // Step 25. B->A : Nonce Get
+                    // Step 26. A->B : Nonce Report
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
+                        security2TimeoutOccurred("NONCE_GET " + keyBeingGranted);
+                        node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+                        return;
+                    }
+
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+
+                    // Step 27: B->A : Security 2 Network Key Verify
+                    // Step 28 and 29. A->B : Security 2 Transfer End:
+                    if (security2CommandClass
+                            .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_TRANSFER_END) == false) {
+                        security2TimeoutOccurred("e(NETWORK_KEY_VERIFY) " + keyBeingGranted);
+                        node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+                        return;
+                    }
+
+                    if (shouldContinueS2Pairing(security2CommandClass) == false) {
+                        return;
+                    }
+                    // Loop back up for each granted key
+                }
+                // All Keys have been requested.
+
+                // wait for Step 30. B->A : Security 2 Transfer End
+                if (security2CommandClass.waitToReceiveTransferEnd() == false) {
+                    security2TimeoutOccurred("e(TRANSFER_END)");
+                    node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+                    return;
+                }
+
+                controller.notifyEventListeners(
+                        new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeComplete, node.getNodeId()));
+                logger.error("NODE {}: SECURITY_2_INC State=COMPLETE", node.getNodeId());
+
+            } else {
+                logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: TOO_LONG?
+            }
+        } catch (IOException | ZWaveCryptoException e) {
+            node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+            logger.error("NODE {}: SECURITY_2_INC State=EXCEPTION message={}", node.getNodeId(), e.getMessage(), e);
+        }
+    }
+
+    private boolean shouldContinueS2Pairing(ZWaveSecurity2CommandClass security2CommandClass) {
+        if (initRunning == false) {
+            return false;
+        } else if (security2CommandClass.shouldContinueSecureInclusion().get() == false) {
+            ZWaveProtocolViolationException protocolViolationException = security2CommandClass
+                    .getProtocolViolationException();
+            if (protocolViolationException != null && protocolViolationException.getFailType().isPresent()) {
+                ZWaveS2FailType failType = protocolViolationException.getFailType().get();
+                controller.enqueue(security2CommandClass.buildFailMessage(failType));
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass, ZWaveS2FailType failTypeParam) {
+        security2CommandClass.setIsPairing(false);
+        node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
+        controller.notifyEventListeners(
+                new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
+        // Should we send a FAIL command to the device?
+        ZWaveS2FailType failTypeToSend = failTypeParam;
+        if (failTypeToSend == null && security2CommandClass.getProtocolViolationException() != null
+                && security2CommandClass.getProtocolViolationException().getFailType().isPresent()) {
+            failTypeToSend = security2CommandClass.getProtocolViolationException().getFailType().get();
+        }
+        if (failTypeToSend != null) {
+            controller.enqueue(security2CommandClass.buildFailMessage(failTypeToSend));
+        }
+    }
+
+    private void haltS2Pairing(ZWaveSecurity2CommandClass security2CommandClass) {
+        haltS2Pairing(security2CommandClass, null);
+    }
+
+    private void security2TimeoutOccurred(String stageString) {
+        controller.notifyEventListeners(
+                new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
+        logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason={}_TIMEOUT", node.getNodeId(), stageString);
+        // do not send fail message to node: CC:009F.01.00.11.06D If a node times out, it MUST silently abort the S2
+        // bootstrapping
     }
 
     private void doStaticStages() {
