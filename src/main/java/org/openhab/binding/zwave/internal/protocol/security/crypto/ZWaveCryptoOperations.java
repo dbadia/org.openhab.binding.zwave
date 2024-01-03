@@ -177,7 +177,7 @@ public class ZWaveCryptoOperations {
     }
 
     /**
-     * TODO: zDoc
+     * TODO:DB zDoc
      *
      */
     public SecureRandom instantiateSpan(byte[] senderEntrophyInput, byte[] receiverEntrophyInput)
