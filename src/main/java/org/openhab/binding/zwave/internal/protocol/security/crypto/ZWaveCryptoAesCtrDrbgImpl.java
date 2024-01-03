@@ -8,7 +8,8 @@ import java.util.Arrays;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 
 /**
- * TODO does Java 17 does not support AES CTR_DBRG?. Bouncy Castle has an implementation, but it is FIPS compliant which
+ * TODO DB does Java 17 does not support AES CTR_DBRG?. Bouncy Castle has an implementation, but it is FIPS compliant
+ * which
  * is not
  * compatible (it forces a derivation function, where as the ZWave spec requires none).
  *

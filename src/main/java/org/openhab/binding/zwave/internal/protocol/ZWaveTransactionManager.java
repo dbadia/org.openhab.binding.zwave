@@ -945,7 +945,7 @@ public class ZWaveTransactionManager {
                     // We have a NONCE, so encapsulate and send
                     logger.trace("NODE {}: NONCE available so {} encap and send.", transaction.getNodeId(),
                             abbreviation);
-                    throw new NotImplementedException("TODO"); // TODO: we need to do something here?
+                    throw new NotImplementedException("TODO"); // TODO: DB we need to do something here?
 
                 } else {
                     // Request a nonce - create a temporary transaction

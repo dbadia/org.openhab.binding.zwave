@@ -728,7 +728,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // keys MAY be reduced to a subset of the list that was requested in the previous KEX Report from Node B
                 // see CC:009F.01.00.13.008
 
-                // TODO: update all timers to real values
+                // TODO: DB update all timers to real values
                 long startTime = System.currentTimeMillis();
                 boolean allowCsa = false; // we don't support CSA
                 ZWaveS2KexScheme selectedKexScheme = ZWaveS2KexScheme._1;
@@ -860,7 +860,7 @@ public class ZWaveNodeInitStageAdvancer {
                 logger.debug("NODE {}: SECURITY_2_INC State=PUBLIC_KEY_REPORT_SEND", node.getNodeId());
                 // CC:009F.01.01.11.002 A node sending this command MUST accept a delay up to <Previous Round-trip-time
                 // to peer node> + 250 ms before receiving the Security 2 Nonce Report Command.
-                // TODO: waitTimeNano ?
+                // TODO: DB waitTimeNano ?
                 long waitTimeNano = TimeUnit.MILLISECONDS.toNanos(elapsedRoundtripTimeMillis + 250);
                 if (processTransaction(security2CommandClass.buildPublicKeyReportMessage(ourTempEcdhPublicKeyBytes),
                         INCLUSION_TIMER_20_SEC_NANOS, 3) == false) {
@@ -1045,7 +1045,7 @@ public class ZWaveNodeInitStageAdvancer {
                 logger.error("NODE {}: SECURITY_2_INC State=COMPLETE", node.getNodeId());
 
             } else {
-                logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: TOO_LONG?
+                logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: DB TOO_LONG?
             }
         } catch (IOException | ZWaveCryptoException e) {
             node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);

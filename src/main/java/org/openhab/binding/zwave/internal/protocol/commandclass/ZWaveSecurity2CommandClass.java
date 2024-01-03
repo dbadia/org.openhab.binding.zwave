@@ -297,11 +297,11 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * Creates a new instance of the ZWaveSecurity2CommandClass class.
      *
      * @param node
-     *                       the node this command class belongs to
-     *                       the controller to use
+     *            the node this command class belongs to
+     *            the controller to use
      * @param controller
      * @param endpoint
-     *                       the endpoint this Command class belongs to
+     *            the endpoint this Command class belongs to
      */
     public ZWaveSecurity2CommandClass(ZWaveNode node, ZWaveController controller, ZWaveEndpoint endpoint) {
         super(node, controller, endpoint);
@@ -350,7 +350,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
                     .enqueueNonce(new ZWaveCommandClassTransactionPayloadBuilder(getNode().getNodeId(),
                             CommandClassSecurity2V1.buildNonceReport(getAndIncrementOutboundSequenceNumber(),
                                     spanOutOfSync, mpanOutOfSync, lastREISentToNode))
-                                            .withPriority(TransactionPriority.NonceResponse).build());
+                            .withPriority(TransactionPriority.NonceResponse).build());
             updateLastResponseQueuedAt(SECURITY_2_NONCE_REPORT);
         } catch (IOException e) {
             logger.error("NODE {}: error building NONCE_REPORT", getNode().getNodeId(), e);
@@ -418,13 +418,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
      * 3.6.4.4.2 Generate the Additional Authenticated Data (AAD) for AES CCM encryption and decryption
      *
      * @param destinationTag The use of this field depends on the actual frame. CC:009F.01.00.11.00A
-     *                           If the field is used for a Singlecast frame, this field MUST carry the Receiver NodeID.
-     *                           If the field is used for an S2 Multicast frame, this field MUST carry the S2 Multicast
-     *                           Group ID.
-     * @param messageLength  The total length in bytes of the Security 2 Message Encapsulation Command
-     * @param extensionData  CC:009F.01.00.11.00B This field MUST contain all non-encrypted extension objects.
-     *                           CC:009F.01.00.11.00C This field MUST include the Length and Type fields prepending the
-     *                           actual data of each extension
+     *            If the field is used for a Singlecast frame, this field MUST carry the Receiver NodeID.
+     *            If the field is used for an S2 Multicast frame, this field MUST carry the S2 Multicast
+     *            Group ID.
+     * @param messageLength The total length in bytes of the Security 2 Message Encapsulation Command
+     * @param extensionData CC:009F.01.00.11.00B This field MUST contain all non-encrypted extension objects.
+     *            CC:009F.01.00.11.00C This field MUST include the Length and Type fields prepending the
+     *            actual data of each extension
      *
      * @return the AAD data
      * @throws IOException
@@ -608,8 +608,8 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     public ZWaveMessagePayloadTransaction buildSecurityNonceGet() {
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildNonceGet())
-                        .withExpectedResponseCommand(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT)
-                        .withPriority(TransactionPriority.Immediate).build();
+                .withExpectedResponseCommand(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT)
+                .withPriority(TransactionPriority.Immediate).build();
         return payload;
     }
 
@@ -758,8 +758,8 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     public ZWaveMessagePayloadTransaction buildKexGetMessage() {
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildKexGet())
-                        .withExpectedResponseCommand(CommandClassSecurity2V1.KEX_REPORT)
-                        .withPriority(TransactionPriority.Immediate).build();
+                .withExpectedResponseCommand(CommandClassSecurity2V1.KEX_REPORT)
+                .withPriority(TransactionPriority.Immediate).build();
         return payload;
     }
 
@@ -821,7 +821,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         if (csaBit == null) {
             throw new ZWaveProtocolViolationException("KEX_REPORT csa bit was null");
         }
-        // TODO: validate CSA bit as follows
+        // TODO: DB validate CSA bit as follows
         /**
          * CC:009F.01.05.11.019 This flag MUST be set to 0 if none of the S2 Authenticated and S2 Access Control
          * Security Classes are requested
@@ -884,8 +884,8 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         this.kexSetDataSentToNode = kexSetData;
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildKexSet(kexSetData))
-                        .withExpectedResponseCommand(CommandClassSecurity2V1.PUBLIC_KEY_REPORT)
-                        .withPriority(TransactionPriority.Immediate).build();
+                .withExpectedResponseCommand(CommandClassSecurity2V1.PUBLIC_KEY_REPORT)
+                .withPriority(TransactionPriority.Immediate).build();
         return payload;
     }
 
@@ -934,7 +934,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     public ZWaveMessagePayloadTransaction buildPublicKeyReportMessage(byte[] ourPublicKeyBytes) throws IOException {
         ZWaveCommandClassTransactionPayload payload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildPublicKeyReport(ourPublicKeyBytes))
-                        .withPriority(TransactionPriority.Immediate).build();
+                .withPriority(TransactionPriority.Immediate).build();
         return payload;
     }
 
@@ -1018,7 +1018,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // Reply with the Kex Report
         getController().enqueueNonce(new ZWaveCommandClassTransactionPayloadBuilder(getNode().getNodeId(),
                 CommandClassSecurity2V1.buildKexReport(kexReportDataFromNode))
-                        .withPriority(TransactionPriority.Immediate).build());
+                .withPriority(TransactionPriority.Immediate).build());
         synchronized (timestampOfLastResponseQueued) {
             timestampOfLastResponseQueued.notify();
         }
@@ -1063,7 +1063,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         // Don't call withExpectedResponseCommand because the response can vary
         getController().enqueue(new ZWaveCommandClassTransactionPayloadBuilder(getNode().getNodeId(),
                 CommandClassSecurity2V1.buildNetworkKeyReport(keyType, keyBytes))
-                        .withPriority(TransactionPriority.Immediate).build());
+                .withPriority(TransactionPriority.Immediate).build());
     }
 
     /**
@@ -1088,8 +1088,8 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
          */
         ZWaveCommandClassTransactionPayload outgoingPayload = new ZWaveCommandClassTransactionPayloadBuilder(
                 getNode().getNodeId(), CommandClassSecurity2V1.buildTransferEnd(true))
-                        // We can't predict the expected response
-                        .withPriority(TransactionPriority.Immediate).build();
+                // We can't predict the expected response
+                .withPriority(TransactionPriority.Immediate).build();
         getController().enqueue(outgoingPayload);
     }
 
