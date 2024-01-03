@@ -35,9 +35,9 @@ public class ZWaveBindingConstants {
     public final static String CONFIGURATION_SISNODE = "controller_sisnode";
 
     // Security keys
-    public final static String CONFIGURATION_NETWORKKEY_S2_2 = "security_networkkey_S2_2"; // Access Control
-    public final static String CONFIGURATION_NETWORKKEY_S2_1 = "security_networkkey_S2_1"; // Authenticated
-    public final static String CONFIGURATION_NETWORKKEY_S2_0 = "security_networkkey_S2_0"; // Unauthenticated
+    public final static String CONFIGURATION_NETWORKKEY_S2_ACCESS = "security_networkkey_s2_access";
+    public final static String CONFIGURATION_NETWORKKEY_S2_AUTH = "security_networkkey_s2_auth";
+    public final static String CONFIGURATION_NETWORKKEY_S2_UNAUTH = "security_networkkey_s2_unauth";
     public final static String CONFIGURATION_NETWORKKEY = "security_networkkey"; // S0
 
     public final static String CONFIGURATION_SECUREINCLUSION = "security_inclusionmode";

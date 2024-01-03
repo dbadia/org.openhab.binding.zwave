@@ -197,8 +197,29 @@ In this mode, only <i>Entry Control Devices</i> such as locks will be securely i
             </parameter>
 
             <parameter name="security_networkkey" type="text" groupName="network">
-                <label>Network Security Key</label>
-                <description>Set the network security key</description>
+                <label>S0 Network Security Key</label>
+                <description>Set the network security key for S0</description>
+                <advanced>true</advanced>
+                <default></default>
+            </parameter>
+            
+            <parameter name="security_networkkey_s2_unauth" type="text" groupName="network">
+                <label>S2 Unauthenticated Security Key</label>
+                <description>Set the network security key for S2 unauthenticated transactions</description>
+                <advanced>true</advanced>
+                <default></default>
+            </parameter>
+
+            <parameter name="security_networkkey_s2_auth" type="text" groupName="network">
+                <label>S2 Authenticated Security Key</label>
+                <description>Set the network security key for S2 authenticated transactions</description>
+                <advanced>true</advanced>
+                <default></default>
+            </parameter>
+            
+            <parameter name="security_networkkey_s2_access" type="text" groupName="network">
+                <label>S2 Access Security Key</label>
+                <description>Set the network security key for S2 access control transactions</description>
                 <advanced>true</advanced>
                 <default></default>
             </parameter>
