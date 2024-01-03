@@ -516,6 +516,9 @@ public class ZWaveNodeInitStageAdvancer {
 
         // Check if we want to perform a secure inclusion...
         boolean doSecureInclusion = false;
+        // TODO: DB remove
+        logger.debug("NODE {}: secureInclusionMode={}", node.getNodeId(), controller.getSecureInclusionMode());
+
         switch (controller.getSecureInclusionMode()) {
             default:
             case 0:
