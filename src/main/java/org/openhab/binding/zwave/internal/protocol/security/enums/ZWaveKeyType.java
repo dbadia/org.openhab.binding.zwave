@@ -17,11 +17,12 @@ import org.openhab.binding.zwave.internal.protocol.SerialMessage;
  */
 public enum ZWaveKeyType implements ZWaveS2BitmaskEnumType {
     S2_TEMP(-1, "S2 Temporary Pairing", 100, "invalid", false, false),
-    S2_ACCESS_CONTROL(2, "S2 Access Control Class", 1, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_2, true, true),
-    S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_1, false,
+    S2_ACCESS_CONTROL(2, "S2 Access Control Class", 1, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_ACCESS, true,
             true),
-    S2_UNAUTHENTICATED(0, "S2 Unauthenticated Class", 3, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_0, false,
-            false),
+    S2_AUTHENTICATED(1, "S2 Authenticated Class S2", 2, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_AUTH, false,
+            true),
+    S2_UNAUTHENTICATED(0, "S2 Unauthenticated Class", 3, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY_S2_UNAUTH,
+            false, false),
     S0(7, "S0 Secure legacy devices", 4, ZWaveBindingConstants.CONFIGURATION_NETWORKKEY, false, false);
 
     private static List<ZWaveKeyType> keyTypesFromWeakestToStrongestCache = null;
