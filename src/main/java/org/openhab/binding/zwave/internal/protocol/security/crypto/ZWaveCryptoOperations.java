@@ -223,7 +223,7 @@ public class ZWaveCryptoOperations {
         byte[] mei = new byte[T1.length + T2.length];
         System.arraycopy(T1, 0, mei, 0, T1.length);
         System.arraycopy(T2, 0, mei, T1.length, T2.length);
-        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, SPAN_PERSONALIZATION_STRING, NONCE_NONE, false);
+        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
     }
 
 

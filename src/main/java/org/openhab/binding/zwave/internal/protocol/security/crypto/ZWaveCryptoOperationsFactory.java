@@ -17,9 +17,6 @@ import org.slf4j.LoggerFactory;
 public class ZWaveCryptoOperationsFactory {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperationsFactory.class);
 
-    // per CC:009F.01.00.11.016
-    private static final byte[] PRNG_PERSONALIZATION_STRING = new byte[32];
-    private static final byte[] NONCE_NONE = new byte[0];
     private static final int WAIT_FOR_STICK_ENTROPY_SECONDS = 10;
 
     private static final Object rngSetLockLock = new Object();
@@ -45,7 +42,7 @@ public class ZWaveCryptoOperationsFactory {
                 try {
                     final ZWaveCryptoAesAeadCcm aeadCcmProvider = new ZWaveCryptoAesAeadCcmImpl();
                     final ZWaveCryptoAesCmac cmacProvider = new ZWaveCryptoAesCmacImpl();
-                    final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgImpl();
+                    final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgBouncyCastleBuilder();
                     final ZWaveCryptoDiffieHellman diffieHellmanProvider = new ZWaveCryptoDiffieHellmanImpl();
                     stopWatch.reset();
                     byte[] hardwareEntropyBytes = waitForHardwareBaseEntropy(stopWatch);
@@ -141,8 +138,8 @@ public class ZWaveCryptoOperationsFactory {
      */
     private static final SecureRandom initPrngAccordingToZwaveSpec(ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
             byte[] hardwareSourcedEntrophyInput) throws ZWaveCryptoException {
-        SecureRandom random = ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(
-                hardwareSourcedEntrophyInput, PRNG_PERSONALIZATION_STRING, NONCE_NONE, true);
+        SecureRandom random = ctrDrbgProvider
+                .buildAesCounterModeDeterministicRandomNumberGenerator(hardwareSourcedEntrophyInput, true);
 
         // Use it to ensure it works correctly
         random.nextBytes(new byte[16]);
