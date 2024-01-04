@@ -60,7 +60,7 @@ public class ZWaveCryptoHardwareRngCoordinator {
             }
         }
         if (supportsRandom == false) {
-            throw new ZWaveCryptoException("Controller does not support GetRandom");
+            return null;
         } else if (exception != null) {
             throw exception;
         } else if (randomBytes == null && System.currentTimeMillis() > stopAt) {
