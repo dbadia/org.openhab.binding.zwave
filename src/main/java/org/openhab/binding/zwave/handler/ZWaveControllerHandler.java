@@ -647,6 +647,9 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             // and will block until that is complete
             ZWaveCryptoOperationsFactory.initFromConfig(networkSecurityKeys);
             ZWaveCryptoOperations cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
+            if (cryptoOperations == null) {
+                return;
+            }
             for (ZWaveKeyType networkKeyType : networkSecurityKeys.missingKeys()) {
                 try {
                     byte[] networkKeyBytes = generateNetworkAesKey(cryptoOperations, networkKeyType,

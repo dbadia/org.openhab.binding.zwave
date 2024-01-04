@@ -240,9 +240,9 @@ public class ZWaveInclusionController implements ZWaveEventListener {
 
                     ZWaveCommandClass zwaveCommandClass;
                     if (commandClass == CommandClass.COMMAND_CLASS_SECURITY_2) {
-                        // S0 is mandatory when S2 is supported, so we add that instead for now
-                        zwaveCommandClass = ZWaveCommandClass.getInstance(CommandClass.COMMAND_CLASS_SECURITY.getKey(),
-                                newNode, controller);
+                        // S0 is mandatory when S2 is supported, so we add that instead for now TODO: DB what? add both?
+                        zwaveCommandClass = ZWaveCommandClass
+                                .getInstance(CommandClass.COMMAND_CLASS_SECURITY_2.getKey(), newNode, controller);
                     } else {
                         zwaveCommandClass = ZWaveCommandClass.getInstance(commandClass.getKey(), newNode, controller);
                     }

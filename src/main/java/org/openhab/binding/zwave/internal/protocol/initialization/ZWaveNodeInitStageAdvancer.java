@@ -493,7 +493,8 @@ public class ZWaveNodeInitStageAdvancer {
                 .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY);
         ZWaveSecurity2CommandClass security2CommandClass = (ZWaveSecurity2CommandClass) node
                 .getCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
-
+        logger.debug("NODE {}: deciding on SECURITY: securityCommandClass={} security2CommandClass={}",
+                node.getNodeId(), securityCommandClass, security2CommandClass);
         // Prefer SECURITY2 over SECURITY0
         if (security2CommandClass != null) {
             security2CommandClass.setIsPairing(true);
