@@ -30,7 +30,8 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
                     makePredictionResistant);
             // SP800 is the NIST spec that CTR DRBG is based on
             SP800SecureRandomBuilder builder = new SP800SecureRandomBuilder(entropySourceProvider);
-            SP800SecureRandom secureRandom = builder.setPersonalizationString(PRNG_PERSONALIZATION_STRING)
+            SP800SecureRandom secureRandom = builder.setSecurityStrength(keySizeInBits)
+                    .setPersonalizationString(PRNG_PERSONALIZATION_STRING)
                     .buildCTR(AESEngine.newInstance(), keySizeInBits, NONCE_NONE, makePredictionResistant);
             return secureRandom;
         } catch (RuntimeException e) {

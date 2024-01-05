@@ -79,7 +79,6 @@ public class CommandClassSecurity2V1 {
     }
 
     public static byte[] buildKexSet(ZWaveKexData kexSetData) {
-        logger.debug("Creating command message SECURITY_2_KEX_SET version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
@@ -87,6 +86,7 @@ public class CommandClassSecurity2V1 {
 
         // Echo[0] - CC:009F.01.06.11.00D The including node MUST set this flag to ‘0’.
         boolean echoFlag = false;
+        logger.debug("SECURITY_2_INC >> KEX_SET echoFlag={} {}", echoFlag, kexSetData.toString());
         writeKexData(outputData, echoFlag, kexSetData);
         return outputData.toByteArray();
     }
@@ -158,16 +158,13 @@ public class CommandClassSecurity2V1 {
         } else {
             logger.debug("Parsing SECURITY_2_KEX_SET");
         }
-        logger.debug("Parsing SECURITY_2_KEX_REPORT {}", SerialMessage.bb2hex(payload)); // TODO: delete
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Echo'
         BitSet bitSet = BitSet.valueOf(new byte[] { payload[2] });
-        logger.debug("Parsing SECURITY_2_KEX_REPORT echo = " + bitSet.get(0)); // TODO: LOG remove or trace
         responseTable.put("ECHO", bitSet.get(0));
 
         // Parse 'Request CSA'
-        logger.debug("Parsing SECURITY_2_KEX_REPORT CSA = " + bitSet.get(1)); // TODO: LOG remove or trace
         responseTable.put("CLIENT_SIDE_AUTHENTICATION", bitSet.get(1));
 
         // Parse Supported KEX Schemes
@@ -190,7 +187,7 @@ public class CommandClassSecurity2V1 {
     }
 
     public static Map<String, Object> handlePublicKeyReport(byte[] payload) {
-        logger.debug("Parsing PUBLIC_KEY_REPORT: {}", SerialMessage.bb2hex(payload));
+        logger.trace("Parsing PUBLIC_KEY_REPORT: {}", SerialMessage.bb2hex(payload)); // TODO: DB trace of remove
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Including node'
@@ -201,7 +198,8 @@ public class CommandClassSecurity2V1 {
         byte[] publicKeyBytes = new byte[payload.length - 3];
         System.arraycopy(payload, 1, publicKeyBytes, 0, payload.length - 3);
         responseTable.put("NODE_PUBLIC_KEY_BYTES", publicKeyBytes);
-
+        logger.debug("SECURITY_2_INC << PUBLIC_KEY_REPORT includingNode={}, device EcdhPublicKeyBytes length={}",
+                bitSet.get(0), publicKeyBytes.length);
         return responseTable;
     }
 
@@ -502,8 +500,8 @@ public class CommandClassSecurity2V1 {
     /**
      * Parses a byte into a bitmask, then returns a List of the bitmask enums which were set
      *
-     * @param toParse            the byte to parse
-     * @param enumClass          The enumeration class which implements ZWaveSecurity2BitmaskEnumType
+     * @param toParse the byte to parse
+     * @param enumClass The enumeration class which implements ZWaveSecurity2BitmaskEnumType
      * @param enumClassAsBitmask the same argument as enumClass, required for proper generics handling
      * @return list of the corresponding bitmask enums which were set on the given byte
      */

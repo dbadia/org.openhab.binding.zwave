@@ -586,7 +586,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
 
     public static boolean doesCommandRequireSecurityEncapsulation(int commandKey) {
         boolean requiresSecurity = SECURITY_EXEMPT_COMMANDS.contains(commandKey) == false;
-        logger.debug("command 0x{} requires security={}  int={} exempt list={}", Integer.toHexString(commandKey),
+        logger.trace("command 0x{} requires security={}  int={} exempt list={}", Integer.toHexString(commandKey),
                 requiresSecurity, commandKey, SECURITY_EXEMPT_COMMANDS);
         return requiresSecurity;
     }
@@ -899,7 +899,6 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             logger.error("NODE {}: received PUBLIC_KEY_REPORT but not in secure inclusion mode", getNode().getNodeId());
             return;
         }
-        logger.debug("NODE {}: SECURITY_2_INC State=PUBLIC_KEY_REPORT_RECEIVED", getNode().getNodeId());
         Map<String, Object> responseTable = CommandClassSecurity2V1.handlePublicKeyReport(payload.getPayloadBuffer());
 
         // Including node: 1 bit
@@ -914,7 +913,6 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         }
 
         byte[] tempDeviceEcdhPublicKeyBytes = (byte[]) responseTable.get("NODE_PUBLIC_KEY_BYTES");
-        logger.debug("SECURITY_2 received device EcdhPublicKeyBytes length={}", tempDeviceEcdhPublicKeyBytes.length);
         // CC:009F.01.00.11.0A7 If authentication is used, the DSK bytes 1..2 MUST be obfuscated by zeros.
         // CC:009F.01.08.11.00B If no authentication is used (S2 Unauthenticated and/or S0 classes are granted only),
         // both joining and including nodes ECDH Public Keys MUST be transmitted in their integrality

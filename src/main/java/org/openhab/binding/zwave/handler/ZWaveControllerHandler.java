@@ -13,6 +13,7 @@
 package org.openhab.binding.zwave.handler;
 
 import static org.openhab.binding.zwave.ZWaveBindingConstants.*;
+import static org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory.exceptionToLog;
 
 import java.math.BigDecimal;
 import java.util.Calendar;
@@ -636,13 +637,20 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
 
         @Override
         public void run() {
-            // ZWaveCryptoOperationsFactory.initFromConfig() can be slow as the spec very specific about how entropy is
-            // gathered and how keys are to be generated (rightfully so as these keys will typically be used for many
-            // years) see CC:009F.01.00.11.015
-            // ZWaveCryptoOperationsFactory.initFromConfig() is slow as it requires entropy gathering
-            // and will block until that is complete
-            ZWaveCryptoOperationsFactory.initFromConfig(networkSecurityKeys);
-            ZWaveCryptoOperations cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
+            ZWaveCryptoOperations cryptoOperations = null;
+            try {
+                // ZWaveCryptoOperationsFactory.initFromConfig() can be slow as the spec very specific about how entropy
+                // is
+                // gathered and how keys are to be generated (rightfully so as these keys will typically be used for
+                // many
+                // years) see CC:009F.01.00.11.015
+                // ZWaveCryptoOperationsFactory.initFromConfig() is slow as it requires entropy gathering
+                // and will block until that is complete
+                ZWaveCryptoOperationsFactory.initFromConfig(networkSecurityKeys);
+                cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
+            } catch (RuntimeException e) {
+                logger.error("Error key load and crypto init", exceptionToLog(logger, e));
+            }
             if (cryptoOperations == null) {
                 return;
             }
@@ -659,8 +667,8 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
                     networkSecurityKeys.addKey(networkKeyType, networkKey);
                     logger.debug("Generated new key for {}", networkKeyType);
                 } catch (RuntimeException e) {
-                    logger.error("Error during key generation or storage for {}.  Key will be unusable",
-                            networkKeyType);
+                    logger.error("Error during key generation or storage for {}.  Key will be unusable", networkKeyType,
+                            exceptionToLog(logger, e));
                 }
             }
         }
