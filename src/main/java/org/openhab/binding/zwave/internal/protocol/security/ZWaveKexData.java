@@ -3,9 +3,9 @@ package org.openhab.binding.zwave.internal.protocol.security;
 import java.util.Collections;
 import java.util.List;
 
+import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2ECDHProfile;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2KexScheme;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 
 /**
  * Holder for KEX_SET and KEX_REPORT data.
@@ -65,15 +65,14 @@ public class ZWaveKexData {
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
-        builder.append("ZwaveSecurity2KexData [clientSideAuthentication=");
+        builder.append("csa=");
         builder.append(clientSideAuthentication);
-        builder.append(", kexSchemesList=");
+        builder.append(", kexSchemes=");
         builder.append(kexSchemesList);
-        builder.append(", ecdhProfileList=");
+        builder.append(", ecdhProfiles=");
         builder.append(ecdhProfileList);
-        builder.append(", keyTypeList=");
+        builder.append(", keyTypes=");
         builder.append(keyTypeList);
-        builder.append("]");
         return builder.toString();
     }
 

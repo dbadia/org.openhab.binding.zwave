@@ -74,7 +74,7 @@ public class ZWaveCryptoOperationsFactory {
                     rngSetLockLock.wait();
                     logger.debug("rngSetLockLock woke up {}", Thread.currentThread().getName());
                 } catch (InterruptedException e) {
-                    // TODO: handle exception
+                    // TODO: DB handle exception
                 }
             }
         }
@@ -138,11 +138,13 @@ public class ZWaveCryptoOperationsFactory {
      */
     private static final SecureRandom initPrngAccordingToZwaveSpec(ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
             byte[] hardwareSourcedEntrophyInput) throws ZWaveCryptoException {
+        // TODO: DB we're going to need more entropy, right? Need to pass a securerandom here and override the
+        // constructor...
         SecureRandom random = ctrDrbgProvider
                 .buildAesCounterModeDeterministicRandomNumberGenerator(hardwareSourcedEntrophyInput, true);
 
         // Use it to ensure it works correctly
-        random.nextBytes(new byte[16]);
+        random.nextBytes(new byte[1]);
         return random;
     }
 
@@ -184,6 +186,20 @@ public class ZWaveCryptoOperationsFactory {
     public static boolean isInitialized() {
         synchronized (initLock) {
             return instance != null;
+        }
+    }
+
+    /**
+     * Helper method to only log stack traces when debugging is active
+     *
+     * @param logger the logger
+     * @param exception the exception
+     */
+    public static Exception exceptionToLog(Logger logger, Exception e) {
+        if (logger.isDebugEnabled()) {
+            return e;
+        } else {
+            return null;
         }
     }
 

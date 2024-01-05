@@ -661,7 +661,7 @@ public class ZWaveNodeInitStageAdvancer {
                     haltS2Pairing(security2CommandClass);
                     return;
                 }
-                logger.debug("NODE {}: SECURITY_2_INC kexReportData={}", node.getNodeId(), kexReportData);
+                logger.debug("NODE {}: SECURITY_2_INC << KEX_REPORT={}", node.getNodeId(), kexReportData);
 
                 // Step 4. A1 : Node A MUST verify the KEX Report and, if required, cancel the S2 bootstrapping as
                 // described in Section 3.6.6.4.1
@@ -1058,6 +1058,8 @@ public class ZWaveNodeInitStageAdvancer {
     }
 
     private boolean shouldContinueS2Pairing(ZWaveSecurity2CommandClass security2CommandClass) {
+        logger.debug("NODE {}: SECURITY_2_INC shouldContinueS2Pairing initRunning={} shouldContinue={}",
+                node.getNodeId(), initRunning, security2CommandClass.shouldContinueSecureInclusion().get());
         if (initRunning == false) {
             return false;
         } else if (security2CommandClass.shouldContinueSecureInclusion().get() == false) {
