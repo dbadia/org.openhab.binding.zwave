@@ -9,6 +9,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public enum ZWaveS2ECDHProfile implements ZWaveS2BitmaskEnumType {
+    /**
+     * The public key is 32 bytes, but it's ANS.1 encoded which results in 44 bytes
+     */
     Curve25519(0, 32);
 
     private static Map<String, ZWaveS2ECDHProfile> lookupTable = new ConcurrentHashMap<>();

@@ -39,6 +39,22 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
         }
     }
 
+    @Override
+    public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(SecureRandom entropyRandom,
+            boolean makePredictionResistant) throws ZWaveCryptoException {
+        final int keySizeInBits = 128;
+        try {
+            // SP800 is the NIST spec that CTR DRBG is based on
+            SP800SecureRandomBuilder builder = new SP800SecureRandomBuilder(entropyRandom, makePredictionResistant);
+            SP800SecureRandom secureRandom = builder.setSecurityStrength(keySizeInBits)
+                    .setPersonalizationString(PRNG_PERSONALIZATION_STRING)
+                    .buildCTR(AESEngine.newInstance(), keySizeInBits, NONCE_NONE, makePredictionResistant);
+            return secureRandom;
+        } catch (RuntimeException e) {
+            throw new ZWaveCryptoRuntimeException("Error during init of SecureRandom DRBG", e);
+        }
+    }
+
     static class MyEntropySourceProvider implements EntropySourceProvider {
         private final byte[] data;
         private final boolean isPredictionResistant;

@@ -79,14 +79,13 @@ public class CommandClassSecurity2V1 {
     }
 
     public static byte[] buildKexSet(ZWaveKexData kexSetData) {
-
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
         outputData.write(KEX_SET);
 
         // Echo[0] - CC:009F.01.06.11.00D The including node MUST set this flag to ‘0’.
         boolean echoFlag = false;
-        logger.debug("SECURITY_2_INC >> KEX_SET echoFlag={} {}", echoFlag, kexSetData.toString());
+        logger.debug("SECURITY_2_INC >> KEX_SET echoFlag={} kexSetData={}", echoFlag, kexSetData.toString());
         writeKexData(outputData, echoFlag, kexSetData);
         return outputData.toByteArray();
     }
@@ -118,7 +117,7 @@ public class CommandClassSecurity2V1 {
         writeBitmask(buildBitmask(kexData.getKeyTypeList()), outputData);
     }
 
-    public static byte[] buildNetworkKeyReport(ZWaveKeyType keyType, byte[] keybytes) {
+    public static byte[] buildNetworkKeyReport(ZWaveKeyType keyType, byte[] keybytes) throws IOException {
         logger.debug("Creating command message SECURITY_2_NETWORK_KEY_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
@@ -131,20 +130,23 @@ public class CommandClassSecurity2V1 {
 
         // Network key (16 bytes)
         if (keybytes.length != 16) {
-
+            logger.warn("Invalid key size for network key of {}, please report this error", keybytes.length);
+            throw new IllegalStateException("Invalid key size for network key " + keybytes.length); // TODO: DB delete
         }
-
+        outputData.write(keybytes);
+        logger.debug("SECURITY_2_INC >> NETWORK_KEY_REPORT keyType={} keybytes.len={} {}", keyType, keybytes.length);
         return outputData.toByteArray();
     }
 
     public static Map<String, Object> handleSecurity2KexGet(byte[] payload) {
-        logger.debug("Parsing SECURITY_2_KEX_GET");
+        logger.trace("Parsing SECURITY_2_KEX_GET");
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         // Parse 'Requested Key' (1 byte)
         List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class, ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
+        logger.debug("SECURITY_2_INC << KEX_GET requestedKeysList={}", requestedKeysList);
         // Return the map of processed response data;
         return responseTable;
     }
@@ -152,11 +154,14 @@ public class CommandClassSecurity2V1 {
     /**
      * The fields for KEX_SET and KEX_REPORT are the same, so we use one method to parse both
      */
-    public static Map<String, Object> handleSecurity2KexReportOrKexSet(byte[] payload, boolean isReport) {
+    public static Map<String, Object> parseSecurity2KexReportOrKexSet(byte[] payload, boolean isReport) {
+        String type = "";
         if (isReport) {
-            logger.debug("Parsing SECURITY_2_KEX_REPORT");
+            logger.trace("Parsing SECURITY_2_KEX_REPORT");
+            type = "KEX_REPORT";
         } else {
-            logger.debug("Parsing SECURITY_2_KEX_SET");
+            logger.trace("Parsing SECURITY_2_KEX_SET");
+            type = "KEX_SET";
         }
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
@@ -182,11 +187,16 @@ public class CommandClassSecurity2V1 {
         List<ZWaveKeyType> requestedKeysList = parseBitMask(payload[5], ZWaveKeyType.class, ZWaveKeyType.class);
         responseTable.put("REQUESTED_KEYS", requestedKeysList);
 
+        logger.debug(
+                "SECURITY_2_INC << {} echo={} csa={}, supportedkexSchemes={} supportedEcdhProfiles={} requestedKeys={}",
+                type, responseTable.get("ECHO"), responseTable.get("CLIENT_SIDE_AUTHENTICATION"),
+                supportedKexSchemesList, supportedECDHProfilesList, requestedKeysList);
+
         // Return the map of processed response data;
         return responseTable;
     }
 
-    public static Map<String, Object> handlePublicKeyReport(byte[] payload) {
+    public static Map<String, Object> parsePublicKeyReport(byte[] payload) {
         logger.trace("Parsing PUBLIC_KEY_REPORT: {}", SerialMessage.bb2hex(payload)); // TODO: DB trace of remove
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
@@ -198,13 +208,13 @@ public class CommandClassSecurity2V1 {
         byte[] publicKeyBytes = new byte[payload.length - 3];
         System.arraycopy(payload, 1, publicKeyBytes, 0, payload.length - 3);
         responseTable.put("NODE_PUBLIC_KEY_BYTES", publicKeyBytes);
-        logger.debug("SECURITY_2_INC << PUBLIC_KEY_REPORT includingNode={}, device EcdhPublicKeyBytes length={}",
+        logger.debug("SECURITY_2_INC << PUBLIC_KEY_REPORT includingNode={} deviceEcdhPublicKeyBytesLength={}",
                 bitSet.get(0), publicKeyBytes.length);
         return responseTable;
     }
 
     public static byte[] buildPublicKeyReport(byte[] ourPublicKeyBytes) throws IOException {
-        logger.debug("Creating command message PUBLIC_KEY_REPORT version 1");
+        logger.trace("Creating command message PUBLIC_KEY_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
@@ -215,35 +225,37 @@ public class CommandClassSecurity2V1 {
         bitmask.set(0); // CC:009F.01.08.11.003 When sent by the including node this flag MUST be set to ‘1’.
         writeBitmask(bitmask, outputData);
 
-        logger.debug("PUBLIC_KEY_REPORT count={}", ourPublicKeyBytes.length);
         outputData.write(ourPublicKeyBytes);
+        logger.debug("SECURITY_2_INC >> PUBLIC_KEY_REPORT includingNode={} ourPublicKeyBytesLength={}", bitmask.get(0),
+                ourPublicKeyBytes.length);
 
         return outputData.toByteArray();
     }
 
     public static byte[] buildNonceGet() {
-        logger.debug("Creating command message NONCE_GET version 1");
+        logger.trace("Creating command message NONCE_GET version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
         outputData.write(SECURITY_2_NONCE_GET);
 
+        logger.debug("SECURITY_2_INC >> NONCE_GET");
         return outputData.toByteArray();
     }
 
-    public static Map<String, Object> handleNonceGet(byte[] payload) {
-        logger.debug("Parsing NONCE_GET {}", SerialMessage.bb2hex(payload));
+    public static Map<String, Object> parseNonceGet(byte[] payload) {
+        logger.trace("Parsing NONCE_GET {}", SerialMessage.bb2hex(payload));
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         int sequenceNumber = payload[2] & 0xFF;
         responseTable.put("SEQUENCE_NUMBER", sequenceNumber);
-
+        logger.debug("SECURITY_2_INC << NONCE_GET sequenceNumber={} deviceEcdhPublicKeyBytesLength={}", sequenceNumber);
         return responseTable;
     }
 
     public static byte[] buildNonceReport(int sequenceNumber, boolean spanOutOfSync, boolean mpanOutOfSync,
             byte[] reiBytes) throws IOException {
-        logger.debug("Creating command message SECURITY_2_COMMANDS_NONCE_REPORT version 1");
+        logger.trace("Creating command message SECURITY_2_COMMANDS_NONCE_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
@@ -262,23 +274,27 @@ public class CommandClassSecurity2V1 {
         }
         writeBitmask(bitmask, outputData);
 
-        if (reiBytes.length != 16) {
-            throw new IllegalStateException("REI had invalid size of " + reiBytes.length);
+        if (reiBytes != null && reiBytes.length != 16) {
+            logger.warn("REI had invalid size of " + reiBytes.length + ", please report this error");
         }
+        boolean reiWritten = false;
         // CC:009F.01.02.11.00F
         // If the SOS flag is set to ‘0’, the REI field MUST NOT be included in the command
         // If the SOS flag is set to ‘1’, the REI field MUST be included in the command.
         if (spanOutOfSync || mpanOutOfSync) {
             outputData.write(reiBytes);
+            reiWritten = true;
         } else if (reiBytes != null) {
-            logger.warn("buildNonceReport was passed SOS false but with an REI.  REI not sent");
+            logger.debug("buildNonceReport was passed SOS false but with an REI.  REI not sent");
         }
-
+        logger.debug(
+                "SECURITY_2_INC >> NONCE_REPORT sequenceNumber={}, spanOutOfSync={}  mpanOutOfSync={} includesRei={}",
+                sequenceNumber, bitmask.get(0), bitmask.get(1), reiWritten);
         return outputData.toByteArray();
     }
 
-    public static Map<String, Object> handleNonceReport(byte[] payload) {
-        logger.debug("Parsing NONCE_REPORT {}", SerialMessage.bb2hex(payload));
+    public static Map<String, Object> parseNonceReport(byte[] payload) {
+        logger.trace("Parsing NONCE_REPORT {}", SerialMessage.bb2hex(payload));
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         int index = 2;
@@ -295,6 +311,9 @@ public class CommandClassSecurity2V1 {
             System.arraycopy(payload, index, nonce, 0, 16);
             responseTable.put("NONCE", nonce);
         }
+        logger.debug(
+                "SECURITY_2_INC << NONCE_REPORT sequenceNumber={} spanOutOfSync={} mpanOutOfSync={} includesNonce={}",
+                sequenceNumber, responseTable.get("SOS"), responseTable.get("MOS"), responseTable.containsKey("NONCE"));
         return responseTable;
     }
 
@@ -303,7 +322,7 @@ public class CommandClassSecurity2V1 {
      * temporary secure channel.
      */
     public static byte[] buildKexReport(ZWaveKexData kexReportDataFromNode) {
-        logger.debug("Creating command message KEX_REPORT version 1");
+        logger.trace("Creating command message KEX_REPORT version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
@@ -312,6 +331,7 @@ public class CommandClassSecurity2V1 {
         boolean echoFlag = true;
         writeKexData(outputData, echoFlag, kexReportDataFromNode);
 
+        logger.debug("SECURITY_2_INC >> KEX_REPORT echoFlag={}, kexReportData={}", echoFlag, kexReportDataFromNode);
         return outputData.toByteArray();
     }
 
@@ -336,7 +356,7 @@ public class CommandClassSecurity2V1 {
      * respond with Security 2 Transfer End with the field “Key verified” set to ‘1’. See CC:009F.01.00.11.06B
      */
     public static byte[] buildTransferEnd(boolean keyVerifiedFlag) {
-        logger.debug("Creating command message SECURITY_2_TRANSFER_END version 1");
+        logger.trace("Creating command message SECURITY_2_TRANSFER_END version 1");
 
         ByteArrayOutputStream outputData = new ByteArrayOutputStream();
         outputData.write(COMMAND_CLASS_KEY);
@@ -355,19 +375,22 @@ public class CommandClassSecurity2V1 {
 
         // Reserved [2-7]
         // This field MUST be set to 0 by a sending node and MUST be ignored by a receiving node. CC:009F.01.0C.11.003
-
         writeBitmask(bitmask, outputData);
+
+        logger.debug("SECURITY_2_INC >> TRANSFER_END keyVerified={}", keyVerifiedFlag);
         return outputData.toByteArray();
     }
 
-    public static Map<String, Object> handleTransferEnd(byte[] payload) {
-        logger.debug("Parsing SECURITY_2_TRANSFER_END");
+    public static Map<String, Object> parseTransferEnd(byte[] payload) {
+        logger.trace("Parsing SECURITY_2_TRANSFER_END");
         Map<String, Object> responseTable = new ConcurrentHashMap<String, Object>();
 
         byte bitmask = (byte) (payload[0] & 0xFF);
         responseTable.put("KEY_REQUEST_COMPLETE", Boolean.valueOf((bitmask & 0x0) == 1));
         responseTable.put("KEY_VERIFIED", Boolean.valueOf((bitmask & 0x1) == 1));
 
+        logger.debug("SECURITY_2_INC << TRANSFER_END keyRequestComplete={} keyVerified={}",
+                responseTable.get("KEY_REQUEST_COMPLETE"), responseTable.get("KEY_VERIFIED"));
         return responseTable;
     }
 
@@ -451,7 +474,7 @@ public class CommandClassSecurity2V1 {
                             return null; // fail silently since this is not in Table 11, Security 2 bootstrapping
                         } else {
                             logger.warn("Invalid encapsulation extension type={}.  Skipping", type);
-                            // TODO: check OH code standards, should thsi be warn?
+                            // TODO: DB check OH code standards, should thsi be warn?
                         }
                         break;
                 }
@@ -465,7 +488,7 @@ public class CommandClassSecurity2V1 {
         return responseTable;
     }
 
-    // TODO: move this to a test case, test each enu
+    // TODO: DB move this to a test case, test each enu
     public static void main(String[] args) {
         try {
             // List list = parseBitMask((byte) 1, ZWaveS2ECDHProfile.class, ZWaveS2ECDHProfile.class);

@@ -19,8 +19,8 @@ import org.slf4j.LoggerFactory;
  * @author Dave Badia
  *
  */
-class ZWaveCryptoAesAeadCcmImpl implements ZWaveCryptoAesAeadCcm {
-    private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoAesAeadCcmImpl.class);
+class ZWaveCryptoAesAeadCcmBouncyCastle implements ZWaveCryptoAesAeadCcm {
+    private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoAesAeadCcmBouncyCastle.class);
 
     /**
      * 3.6.4.4.1 CCM profile CC:009F.01.00.11.006
@@ -44,7 +44,7 @@ class ZWaveCryptoAesAeadCcmImpl implements ZWaveCryptoAesAeadCcm {
 
     private final Provider bcProvider;
 
-    protected ZWaveCryptoAesAeadCcmImpl() {
+    protected ZWaveCryptoAesAeadCcmBouncyCastle() {
         this.bcProvider = new BouncyCastleProvider();
     }
 

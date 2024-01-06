@@ -4,8 +4,9 @@ import static org.openhab.binding.zwave.internal.protocol.SerialMessage.bb2hex;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
-import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.XECPrivateKey;
 import java.util.Arrays;
 import java.util.BitSet;
 
@@ -103,9 +104,17 @@ public class ZWaveCryptoOperations {
         this.prng = prng;
     }
 
-    public byte[] executeDiffieHellmanKeyAgreement(ECPrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes)
+    public byte[] executeDiffieHellmanKeyAgreement(PrivateKey privateKey, byte[] deviceEcdhPublicKeyBytes)
             throws ZWaveCryptoException {
+        if (!(privateKey instanceof XECPrivateKey)) {
+            throw new ZWaveCryptoException("SECURITY_2_ERR Error during ECDH key agreement, invalid key type "
+                    + Arrays.toString(privateKey.getClass().getInterfaces()));
+        }
         return diffieHellmanProvider.executeDiffieHellmanKeyAgreement(privateKey, deviceEcdhPublicKeyBytes, prng);
+    }
+
+    public byte[] extractX25519PublicKeyBytes(KeyPair keyPair) {
+        return diffieHellmanProvider.extractPublicKeyBytes(keyPair);
     }
 
     /**
@@ -226,8 +235,7 @@ public class ZWaveCryptoOperations {
         return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
     }
 
-
-    // TODO: delete
+    // TODO: DB delete
     public static void main(String[] args) {
         try {
             BitSet bitSet = new BitSet(8); // All zeros

@@ -55,6 +55,13 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastle implements ZWaveCryptoAesCtrDrbg 
         }
     }
 
+    @Override
+    public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(SecureRandom entropyRandom,
+            boolean makePredictionResistant) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
     // private final static class OurEntropySource implements sun.security.provider.EntropySource {
     // private final byte[] entropyInputBytes;
     //
@@ -107,4 +114,5 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastle implements ZWaveCryptoAesCtrDrbg 
             };
         }
     }
+
 }
