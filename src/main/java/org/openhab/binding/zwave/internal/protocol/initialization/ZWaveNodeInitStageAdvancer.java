@@ -84,6 +84,8 @@ import org.openhab.core.thing.type.ThingType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * ZWaveNodeStageAdvancer class. Advances the node stage, thereby controlling
  * the initialization of a node.
@@ -398,7 +400,6 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
-        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.INIT_NEIGHBORS);
 
         // logger.debug("NODE {}: Node advancer: INIT_NEIGHBORS - send RoutingInfo", node.getNodeId());
@@ -429,7 +430,6 @@ public class ZWaveNodeInitStageAdvancer {
             return;
         }
 
-        // TODO: LOW delete
         // setCurrentStage(ZWaveNodeInitStage.FAILED_CHECK);
         // processTransaction(new IsFailedNodeMessageClass().doRequest(node.getNodeId()));
         // if (initRunning == false) {
@@ -611,7 +611,8 @@ public class ZWaveNodeInitStageAdvancer {
      * Execute the security handshake as defined by S2.
      *
      */
-    private void doSecureS2Stages(ZWaveSecurity2CommandClass security2CommandClass) {
+    @VisibleForTesting
+    void doSecureS2Stages(ZWaveSecurity2CommandClass security2CommandClass) {
         /*
          * In the rest of this method, the term "Step" is in direct reference to the ZWave Spec:
          * CC:009F.01.00.11.056 The key exchange MUST comply with the following steps
@@ -809,10 +810,10 @@ public class ZWaveNodeInitStageAdvancer {
                         // Step 8 A2: a. The user MUST be prompted a dialog to visually validate the bytes 3..16 of Node
                         // B’s DSK.
                         // see CC:009F.01.00.11.05F
-                        // TODO: NEED_UI
+                        // TODO: DB NEED_UI
                     } else if (inputMethod == ZWaveS2DskDigitInputMethod.QR_CODE) {
-                        // TODO: NEED_UI
-                        // TODO: scan the QR code
+                        // TODO: DB NEED_UI
+                        // TODO: DB scan the QR code
 
                         // Step 8 A2: b. If Node A has received the 16 bytes DSK of Node B via QR scanning, it
                         // MUST substitute the first 16 bytes of Node B’s Public Key with the 16 bytes received via QR
@@ -838,6 +839,8 @@ public class ZWaveNodeInitStageAdvancer {
                 }
 
                 byte[] ourTempEcdhPublicKeyBytes = security2CommandClass.waitForS2TempKeyToFinishGenerating();
+                logger.debug("NODE {}: SECURITY_2_INC ourTempEcdhPublicKeyBytes length={}", node.getNodeId(),
+                        ourTempEcdhPublicKeyBytes.length);
                 if (ourTempEcdhPublicKeyBytes.length != selectedEcdhProfile.getPublicKeyLengthInBytes()) {
                     logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_GENERATED_PUB_INVALID_LENGTH {}",
                             node.getNodeId(), ourTempEcdhPublicKeyBytes.length);
@@ -867,7 +870,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // TODO: DB waitTimeNano ?
                 long waitTimeNano = TimeUnit.MILLISECONDS.toNanos(elapsedRoundtripTimeMillis + 250);
                 if (processTransaction(security2CommandClass.buildPublicKeyReportMessage(ourTempEcdhPublicKeyBytes),
-                        INCLUSION_TIMER_20_SEC_NANOS, 3) == false) {
+                        waitTimeNano, 3) == false) {
                     security2TimeoutOccurred("PUBLIC_KEY_REPORT");
                     return;
                 }
@@ -901,7 +904,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // messages securely using the Temporary Symmetric Key.
                 // -> Received NONCE_GET above, was command class able to queue the NONCE_REPORT?
 
-                // TODO: OLD delete
+                // TODO: DB OLD delete
                 // Set the security2CommandClass on the node so messages will be encapsulated/encrypted from here on
                 // (Nonce Report is automatically exempt, so it is OK to enable even if we didn't receive NONCE_GET and
                 // respond with NONCE_REPORT yet)

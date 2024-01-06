@@ -51,4 +51,18 @@ public class ZWaveCryptoAesCtrDrbgJdk implements ZWaveCryptoAesCtrDrbg {
             throw new ZWaveCryptoRuntimeException("Error during init of SecureRandom DRBG", e);
         }
     }
+
+    @Override
+    public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(SecureRandom entropyRandom,
+            boolean makePredictionResistant) throws ZWaveCryptoException {
+        try {
+            throw new UnsupportedOperationException(
+                    "No way to specify AES w/o messing w JVM and This implementation reads fresh entropy from the system default entropy source determined by the security property securerandom.source. Entropy input is hardcoded to https://docs.oracle.com/javase%2F9%2Fdocs%2Fapi%2F%2F/java/security/DrbgParameters.html");
+            // TODO: DB what if we need makePredictionResistant, only option is Capability.PR_AND_RESEED
+            // return SecureRandom.getInstance("DRBG",
+            // DrbgParameters.instantiation(strength, capability, PRNG_PERSONALIZATION_STRING));
+        } catch (RuntimeException e) {
+            throw new ZWaveCryptoRuntimeException("Error during init of SecureRandom DRBG", e);
+        }
+    }
 }

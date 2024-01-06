@@ -20,6 +20,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -153,7 +154,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             if (networkKeyHex != null && networkKeyHex.length() > 0) {
                 // Sanity check the key data
                 // NOTE: if the data is bad, some sort of runtime error will be thrown
-                // This is good as init will halt and we will have to debug this situation
+                // This isn't good as init will halt and we will have to debug this situation
                 // We don't regenerate keys automatically as they may have been distributed already
                 byte[] keyBytes = ZWaveSecurity0CommandClass.hexToBytes(networkKeyHex);
                 SecretKey networkKey = new SecretKeySpec(keyBytes, ZWaveSecurity0CommandClass.AES);
@@ -643,13 +644,12 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
         public void run() {
             ZWaveCryptoOperations cryptoOperations = null;
             try {
-                // ZWaveCryptoOperationsFactory.initFromConfig() can be slow as the spec very specific about how entropy
-                // is
-                // gathered and how keys are to be generated (rightfully so as these keys will typically be used for
-                // many
-                // years) see CC:009F.01.00.11.015
-                // ZWaveCryptoOperationsFactory.initFromConfig() is slow as it requires entropy gathering
-                // and will block until that is complete
+                /*
+                 * ZWaveCryptoOperationsFactory.initFromConfig() can be slow as the spec very specific about how entropy
+                 * is gathered and how keys are to be generated (rightfully so as these keys will typically be used for
+                 * many years) see CC:009F.01.00.11.015 ZWaveCryptoOperationsFactory.initFromConfig() is slow as it
+                 * requires entropy gathering and will block until that is complete
+                 */
                 ZWaveCryptoOperationsFactory.initFromConfig(networkSecurityKeys);
                 cryptoOperations = ZWaveCryptoOperationsFactory.getCryptoProvider();
             } catch (RuntimeException e) {
@@ -665,7 +665,7 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
                     SecretKey networkKey = new SecretKeySpec(networkKeyBytes, ZWaveSecurity0CommandClass.AES);
                     // The key is useless if we can't save it. Persist, then set
                     Configuration configuration = editConfiguration();
-                    configuration.put(networkKeyType.getControllerConstantName(), keyToHex(networkKeyBytes));
+                    configuration.put(networkKeyType.getControllerConstantName(), asHex(networkKeyBytes));
                     updateConfiguration(configuration);
                     // Key persisted, set it for usage
                     networkSecurityKeys.addKey(networkKeyType, networkKey);
@@ -690,13 +690,9 @@ public abstract class ZWaveControllerHandler extends BaseBridgeHandler implement
             return keyBytes;
         }
 
-        private String keyToHex(byte[] keyBytes) {
-            StringBuilder buf = new StringBuilder();
-            for (byte aByte : keyBytes) {
-                buf.append(String.format("%02X ", aByte));
-            }
-            return buf.toString().trim();
-        }
     }
 
+    public static String asHex(byte[] keyBytes) {
+        return HexFormat.of().formatHex(keyBytes);
+    }
 }

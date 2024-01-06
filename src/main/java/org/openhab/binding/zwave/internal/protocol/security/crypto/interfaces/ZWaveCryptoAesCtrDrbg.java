@@ -35,4 +35,7 @@ public interface ZWaveCryptoAesCtrDrbg {
      */
     public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entrophyBytes,
             boolean makePredictionResistant) throws ZWaveCryptoException;
+
+    public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(SecureRandom entropyRandom,
+            boolean makePredictionResistant) throws ZWaveCryptoException;
 }
