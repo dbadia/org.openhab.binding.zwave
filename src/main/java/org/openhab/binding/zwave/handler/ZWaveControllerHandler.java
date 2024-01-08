@@ -13,7 +13,7 @@
 package org.openhab.binding.zwave.handler;
 
 import static org.openhab.binding.zwave.ZWaveBindingConstants.*;
-import static org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory.exceptionToLog;
+import static org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperations.exceptionToLog;
 
 import java.math.BigDecimal;
 import java.util.Calendar;
