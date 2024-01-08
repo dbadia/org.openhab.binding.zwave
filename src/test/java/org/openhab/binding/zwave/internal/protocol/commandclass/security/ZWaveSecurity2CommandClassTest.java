@@ -12,10 +12,6 @@
  */
 package org.openhab.binding.zwave.internal.protocol.commandclass.security;
 
-import static org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity0CommandClass.hexToBytes;
-
-import javax.crypto.spec.SecretKeySpec;
-
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,9 +24,7 @@ import org.openhab.binding.zwave.internal.protocol.commandclass.ZWaveSecurity2Co
 import org.openhab.binding.zwave.internal.protocol.commandclass.impl.CommandClassSecurityV1;
 import org.openhab.binding.zwave.internal.protocol.initialization.InitializationTestHelper;
 import org.openhab.binding.zwave.internal.protocol.initialization.ZWaveNodeInitStageAdvancer;
-import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
-import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperationsFactory;
-import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.CryptoInitTestHelper;
 import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClassTransactionPayload;
 
 public class ZWaveSecurity2CommandClassTest {
@@ -39,17 +33,7 @@ public class ZWaveSecurity2CommandClassTest {
               // bouncy castle classes are invoked :(
     @Test
     public void testSecureInclusion() throws Exception {
-        // Do some init
-        ZWaveSecurityNetworkKeys keys = new ZWaveSecurityNetworkKeys();
-        keys.addKey(ZWaveKeyType.S0, new SecretKeySpec(hexToBytes("00000000000000000000000000000000"), "AES"));
-        keys.addKey(ZWaveKeyType.S2_UNAUTHENTICATED,
-                new SecretKeySpec(hexToBytes("11111111111111111111111111111111"), "AES"));
-        keys.addKey(ZWaveKeyType.S2_AUTHENTICATED,
-                new SecretKeySpec(hexToBytes("22222222222222222222222222222222"), "AES"));
-        keys.addKey(ZWaveKeyType.S2_ACCESS_CONTROL,
-                new SecretKeySpec(hexToBytes("33333333333333333333333333333333"), "AES"));
-        ZWaveCryptoOperationsFactory.initFromConfig(keys);
-
+        CryptoInitTestHelper.initCryptoForTesting();
         // Mocks
         byte nodeId = 0x01;
         byte[] payload = { nodeId, 2, (byte) CommandClass.COMMAND_CLASS_SECURITY.getKey(),
@@ -66,7 +50,7 @@ public class ZWaveSecurity2CommandClassTest {
         ArgumentCaptor<ZWaveCommandClassTransactionPayload> argumentRx = ArgumentCaptor
                 .forClass(ZWaveCommandClassTransactionPayload.class);
         Mockito.doNothing().when(controllerRx).enqueue(argumentRx.capture());
-        Mockito.when(controllerRx.getSecurityKeys()).thenReturn(keys);
+        Mockito.when(controllerRx.getSecurityKeys()).thenReturn(CryptoInitTestHelper.keys);
 
         ZWaveEndpoint endpoint = Mockito.mock(ZWaveEndpoint.class);
         ZWaveSecurity2CommandClass security2CC = new ZWaveSecurity2CommandClass(nodeRx, controllerRx, endpoint);

@@ -11,6 +11,8 @@ import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZW
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
+
 public class ZWaveCryptoOperationsFactory {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoOperationsFactory.class);
 
@@ -20,7 +22,8 @@ public class ZWaveCryptoOperationsFactory {
     private static final Object initLock = new Object();
 
     private static volatile ZWaveCryptoHardwareRngCoordinator hardwareRngCoordinator = null;
-    private static ZWaveCryptoOperations instance = null;
+    @VisibleForTesting
+    protected static ZWaveCryptoOperations instance = null;
 
     private static Exception initException = null;
 

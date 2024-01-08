@@ -228,7 +228,7 @@ public class ZWaveCryptoOperations {
         return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
     }
 
-    public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
+    public static byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
         try {
             // As of java 17, AESCMAC is not supported in the JDK, so we use BouncyCastle
             Mac mac = Mac.getInstance("AESCMAC", new BouncyCastleProvider()); // TODO: consolidate usage of BC
