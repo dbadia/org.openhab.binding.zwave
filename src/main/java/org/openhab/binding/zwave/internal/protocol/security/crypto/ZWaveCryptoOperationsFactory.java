@@ -6,7 +6,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
-import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCmac;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
 import org.slf4j.Logger;
@@ -39,14 +38,13 @@ public class ZWaveCryptoOperationsFactory {
                 InitStopWatch stopWatch = new InitStopWatch();
                 try {
                     final ZWaveCryptoAesAeadCcm aeadCcmProvider = new ZWaveCryptoAesAeadCcmBouncyCastle();
-                    final ZWaveCryptoAesCmac cmacProvider = new ZWaveCryptoAesCmacImpl();
                     final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgBouncyCastleBuilder();
                     final ZWaveCryptoDiffieHellman diffieHellmanProvider = new ZWaveCryptoDiffieHellmanJdk();
                     stopWatch.reset();
                     SecureRandom entropyRandom = waitForHardwareBaseEntropy();
                     SecureRandom prng = initPrngAccordingToZwaveSpec(ctrDrbgProvider, entropyRandom);
                     logger.debug("crypto init timing: {}", stopWatch.stop("prng"));
-                    instance = new ZWaveCryptoOperations(networkSecurityKeysFromConfig, aeadCcmProvider, cmacProvider,
+                    instance = new ZWaveCryptoOperations(networkSecurityKeysFromConfig, aeadCcmProvider,
                             ctrDrbgProvider, diffieHellmanProvider, prng);
                     logger.debug("initFromConfig: notifyAll");
                     initLock.notifyAll();
@@ -189,20 +187,6 @@ public class ZWaveCryptoOperationsFactory {
     public static boolean isInitialized() {
         synchronized (initLock) {
             return instance != null;
-        }
-    }
-
-    /**
-     * Helper method to only log stack traces when debugging is active
-     *
-     * @param logger the logger
-     * @param exception the exception
-     */
-    public static Exception exceptionToLog(Logger logger, Exception e) {
-        if (logger.isDebugEnabled()) {
-            return e;
-        } else {
-            return null;
         }
     }
 

@@ -1331,8 +1331,9 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     }
 
     public void generateTemporaryEncryptionKeys(byte[] deviceEcdhPublicKeyBytes) throws ZWaveCryptoException {
+        ZWaveCryptoOperations cryptoOps = getCryptoProvider();
         this.deviceEcdhPublicKeyBytes = deviceEcdhPublicKeyBytes;
-        byte[] ecdhSharedSecret = getCryptoProvider().executeDiffieHellmanKeyAgreement(ourTempEcdhKeyPair.getPrivate(),
+        byte[] ecdhSharedSecret = cryptoOps.executeDiffieHellmanKeyAgreement(ourTempEcdhKeyPair.getPrivate(),
                 deviceEcdhPublicKeyBytes);
 
         // @formatter:off
@@ -1349,9 +1350,29 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
          *      o PRK = CMAC(ConstantPRK, ECDH Shared Secret | KeyPub_A | KeyPub_B )
          */
         // @formatter:on
-        SecretKey tempExtractKey = getCryptoProvider().buildAESKey(ZWaveCryptoOperations.CKDF_TEMP_EXTRACT_CONSTANT);
-        byte[] prkBytes = getCryptoProvider().performAesCmac(tempExtractKey, ecdhSharedSecret,
-                ourTempEcdhKeyPair.getPublic().getEncoded(), deviceEcdhPublicKeyBytes);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] dataToMac = null;
+        try {
+            baos.write(ecdhSharedSecret);
+            baos.write(cryptoOps.extractX25519PublicKeyBytes(ourTempEcdhKeyPair));
+            baos.write(deviceEcdhPublicKeyBytes);
+            dataToMac = baos.toByteArray();
+        } catch (IOException e) {
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_IO_FAIL {}", getNode().getNodeId(),
+                    e.getMessage(), e);
+            ZWaveSecurity2CommandClass.this.continueSecureInclusion.set(false);
+            throw new ZWaveCryptoException("ECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_IO_FAIL ", e);
+        }
+        if (dataToMac.length != 96) {
+            logger.error(
+                    "NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_SIZE_ERR expected 96 bytes, found {}",
+                    getNode().getNodeId(), dataToMac.length);
+            ZWaveSecurity2CommandClass.this.continueSecureInclusion.set(false);
+            throw new ZWaveCryptoException("ECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_SIZE_ERR");
+        }
+        SecretKey tempExtractKey = getCryptoProvider()
+                .buildAESKeyFromBytes(ZWaveCryptoOperations.CKDF_TEMP_EXTRACT_CONSTANT);
+        byte[] prkBytes = getCryptoProvider().performAesCmac(tempExtractKey, dataToMac);
 
         // @formatter:off
         /*
@@ -1375,13 +1396,13 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
          *      o TempPersonalizationString = T2 | T3 Sigma
          */
         // @formatter:on
-        SecretKey prkKey = getCryptoProvider().buildAESKey(prkBytes);
+        SecretKey prkKey = getCryptoProvider().buildAESKeyFromBytes(prkBytes);
         byte[] constantTePlusCounter = new byte[16];
         Arrays.fill(constantTePlusCounter, (byte) (0x88 & 0xFF));
         // Compute T1
         constantTePlusCounter[15] = 0x01;
         byte[] T1Bytes = getCryptoProvider().performAesCmac(prkKey, constantTePlusCounter);
-        this.tempAesCcmKey = getCryptoProvider().buildAESKey(T1Bytes);
+        this.tempAesCcmKey = getCryptoProvider().buildAESKeyFromBytes(T1Bytes);
         // Compute T2
         constantTePlusCounter[15] = 0x02;
         byte[] T2Bytes = getCryptoProvider().performAesCmac(prkKey, constantTePlusCounter);

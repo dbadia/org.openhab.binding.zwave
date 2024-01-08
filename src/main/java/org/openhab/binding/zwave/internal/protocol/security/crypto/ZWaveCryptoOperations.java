@@ -3,6 +3,7 @@ package org.openhab.binding.zwave.internal.protocol.security.crypto;
 import static org.openhab.binding.zwave.internal.protocol.SerialMessage.bb2hex;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
@@ -10,12 +11,13 @@ import java.security.interfaces.XECPrivateKey;
 import java.util.Arrays;
 import java.util.BitSet;
 
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
-import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCmac;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
@@ -24,8 +26,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The cryptographic requirements for S2 are significantly more complex than S0, especially during the initial
- * handshake.
- * This class provides a simple interface to CommandClassSecurity2V1 for the execution of those cryptographic
+ * handshake. This class provides a simple interface to CommandClassSecurity2V1 for the execution of those cryptographic
  * operations.
  * <p/>
  * Given that, as of this writing, OpenHAB supports JRE 8, some cryptographic operations are not available by default.
@@ -67,8 +68,6 @@ public class ZWaveCryptoOperations {
 
     private final ZWaveCryptoAesAeadCcm aeadCcmProvider;
 
-    private final ZWaveCryptoAesCmac cmacProvider;
-
     private final ZWaveCryptoAesCtrDrbg ctrDrbgProvider;
 
     private final ZWaveCryptoDiffieHellman diffieHellmanProvider;
@@ -93,12 +92,10 @@ public class ZWaveCryptoOperations {
     }
 
     protected ZWaveCryptoOperations(ZWaveSecurityNetworkKeys networkSecurityKeys, ZWaveCryptoAesAeadCcm aeadCcmProvider,
-            ZWaveCryptoAesCmac cmacProvider, ZWaveCryptoAesCtrDrbg ctrDrbgProvider,
-            ZWaveCryptoDiffieHellman diffieHellmanProvider, SecureRandom prng) {
+            ZWaveCryptoAesCtrDrbg ctrDrbgProvider, ZWaveCryptoDiffieHellman diffieHellmanProvider, SecureRandom prng) {
         super();
         this.networkSecurityKeys = networkSecurityKeys;
         this.aeadCcmProvider = aeadCcmProvider;
-        this.cmacProvider = cmacProvider;
         this.ctrDrbgProvider = ctrDrbgProvider;
         this.diffieHellmanProvider = diffieHellmanProvider;
         this.prng = prng;
@@ -125,11 +122,7 @@ public class ZWaveCryptoOperations {
         return diffieHellmanProvider.generateECDHKeyPairAccordingToZwaveSpec(prng);
     }
 
-    public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
-        return cmacProvider.performAesCmac(secretKey, dataToMacArray);
-    }
-
-    public SecretKey buildAESKey(byte[] keyBytes) {
+    public SecretKey buildAESKeyFromBytes(byte[] keyBytes) {
         return new SecretKeySpec(keyBytes, 0, keyBytes.length, "AES");
     }
 
@@ -205,7 +198,7 @@ public class ZWaveCryptoOperations {
          *      o NoncePRK = CMAC(ConstNonce, SenderEI | ReceiverEI)
          */
         // @formatter:on
-        SecretKey constNonceKey = buildAESKey(CONST_NONCE_CONSTANT);
+        SecretKey constNonceKey = buildAESKeyFromBytes(CONST_NONCE_CONSTANT);
         byte[] noncePrk = performAesCmac(constNonceKey, senderEntrophyInput, receiverEntrophyInput);
 
         // @formatter:off
@@ -222,7 +215,7 @@ public class ZWaveCryptoOperations {
          *      o MEI = T1 | T2
          */
         // @formatter:om
-        SecretKey noncePrkKey = buildAESKey(noncePrk);
+        SecretKey noncePrkKey = buildAESKeyFromBytes(noncePrk);
         int constLength = CONST_ENTROPHY_INPUT_CONSTANT.length;
         byte[] T0 = new byte[constLength + 1];
         System.arraycopy(CONST_ENTROPHY_INPUT_CONSTANT, 0, T0, 0, constLength);
@@ -233,6 +226,34 @@ public class ZWaveCryptoOperations {
         System.arraycopy(T1, 0, mei, 0, T1.length);
         System.arraycopy(T2, 0, mei, T1.length, T2.length);
         return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
+    }
+
+    public byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {
+        try {
+            // As of java 17, AESCMAC is not supported in the JDK, so we use BouncyCastle
+            Mac mac = Mac.getInstance("AESCMAC", new BouncyCastleProvider()); // TODO: consolidate usage of BC
+            mac.init(secretKey);
+            for (byte[] bytes : dataToMacArray) {
+                mac.update(bytes);
+            }
+            return mac.doFinal();
+        } catch (GeneralSecurityException e) {
+            throw new ZWaveCryptoException("Error during AES-CMAC encryption", e);
+        }
+    }
+
+    /**
+     * Helper method to only log stack traces when debugging is active
+     *
+     * @param logger the logger
+     * @param exception the exception
+     */
+    public static Exception exceptionToLog(Logger logger, Exception e) {
+        if (logger.isDebugEnabled()) {
+            return e;
+        } else {
+            return null;
+        }
     }
 
     // TODO: DB delete

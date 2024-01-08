@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.zwave.internal.protocol.initialization;
 
+import static org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoOperations.exceptionToLog;
 import static org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveS2FailType.*;
 
 import java.io.IOException;
@@ -917,8 +918,6 @@ public class ZWaveNodeInitStageAdvancer {
                 // Step 14. A->B : Nonce Report : A’s Nonce
                 if (security2CommandClass
                         .waitForResponseToQueue(CommandClassSecurity2V1.SECURITY_2_NONCE_REPORT) == false) {
-                    // TODO: LOW remove
-                    logger.error("============== DAVE is the waitForResponseToQueue logic working?");
                     security2TimeoutOccurred("NONCE_GET");
                     return;
                 }
@@ -1055,8 +1054,11 @@ public class ZWaveNodeInitStageAdvancer {
                 logger.error("NODE {}: SECURITY_2_INC State=TOO_LONG", node.getNodeId()); // TODO: DB TOO_LONG?
             }
         } catch (IOException | ZWaveCryptoException e) {
+            controller.notifyEventListeners(
+                    new ZWaveInclusionEvent(ZWaveInclusionState.SecureIncludeFailed, node.getNodeId()));
+            logger.error("NODE {}: SECURITY_2_INC State=FAILED Reason={}", node.getNodeId(), e.getMessage(),
+                    exceptionToLog(logger, e));
             node.removeCommandClass(CommandClass.COMMAND_CLASS_SECURITY_2);
-            logger.error("NODE {}: SECURITY_2_INC State=EXCEPTION message={}", node.getNodeId(), e.getMessage(), e);
         }
     }
 
