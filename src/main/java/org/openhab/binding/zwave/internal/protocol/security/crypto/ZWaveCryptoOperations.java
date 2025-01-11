@@ -15,6 +15,7 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
@@ -23,6 +24,8 @@ import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZW
 import org.openhab.binding.zwave.internal.protocol.security.enums.ZWaveKeyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * The cryptographic requirements for S2 are significantly more complex than S0, especially during the initial
@@ -52,7 +55,7 @@ public class ZWaveCryptoOperations {
     /*
      * ConstEntropyInput = 0x88 repeated 15 times
      */
-    public static final byte[] CONST_ENTROPHY_INPUT_CONSTANT = new byte[16];
+    public static final byte[] CONST_ENTROPHY_INPUT_CONSTANT = new byte[15];
 
     public static final byte[] CKDF_TEMP_EXTRACT_CONSTANT = new byte[16];
 
@@ -200,7 +203,13 @@ public class ZWaveCryptoOperations {
         // @formatter:on
         SecretKey constNonceKey = buildAESKeyFromBytes(CONST_NONCE_CONSTANT);
         byte[] noncePrk = performAesCmac(constNonceKey, senderEntrophyInput, receiverEntrophyInput);
+        SecretKey noncePrkKey = buildAESKeyFromBytes(noncePrk);
+        byte[] mei = computeMei(noncePrkKey);
+        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
+    }
 
+    @VisibleForTesting
+    byte[] computeMei(SecretKey noncePrkKey) throws ZWaveCryptoException {
         // @formatter:off
         /*
          * 3.6.4.9.1.1.2 CKDF-MEI-Expand
@@ -214,18 +223,14 @@ public class ZWaveCryptoOperations {
          *      o T2 = CMAC(NoncePRK, T1 | ConstEntropyInput | 0x02)
          *      o MEI = T1 | T2
          */
-        // @formatter:om
-        SecretKey noncePrkKey = buildAESKeyFromBytes(noncePrk);
+        // @formatter:on
         int constLength = CONST_ENTROPHY_INPUT_CONSTANT.length;
-        byte[] T0 = new byte[constLength + 1];
-        System.arraycopy(CONST_ENTROPHY_INPUT_CONSTANT, 0, T0, 0, constLength);
-        T0[constLength] = 0x00;
-        byte[] T1 = performAesCmac(noncePrkKey, T0, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] {0x01});
-        byte[] T2 = performAesCmac(noncePrkKey, T1, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] {0x02});
-        byte[] mei = new byte[T1.length + T2.length];
-        System.arraycopy(T1, 0, mei, 0, T1.length);
-        System.arraycopy(T2, 0, mei, T1.length, T2.length);
-        return ctrDrbgProvider.buildAesCounterModeDeterministicRandomNumberGenerator(mei, false);
+        byte[] t0 = new byte[constLength + 1];
+        System.arraycopy(CONST_ENTROPHY_INPUT_CONSTANT, 0, t0, 0, constLength);
+        t0[constLength] = 0x00;
+        byte[] T1 = performAesCmac(noncePrkKey, t0, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] { 0x01 });
+        byte[] T2 = performAesCmac(noncePrkKey, T1, CONST_ENTROPHY_INPUT_CONSTANT, new byte[] { 0x02 });
+        return ArrayUtils.addAll(T1, T2);
     }
 
     public static byte[] performAesCmac(SecretKey secretKey, byte[]... dataToMacArray) throws ZWaveCryptoException {

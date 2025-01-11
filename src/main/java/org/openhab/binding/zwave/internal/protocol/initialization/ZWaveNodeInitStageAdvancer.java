@@ -899,7 +899,7 @@ public class ZWaveNodeInitStageAdvancer {
                 // Step 12. Temporary Symmetric Key Established: Both Node A and Node B derive a Temporary Symmetric Key
                 // from the ECDH Shared Secret based on CKDF-TempExpand (refer to 3.6.4.7.2).
                 // see CC:009F.01.00.11.061
-                security2CommandClass.generateTemporaryEncryptionKeys(deviceEcdhPublicKeyBytes);
+                security2CommandClass.computeTemporaryEncryptionKeys(deviceEcdhPublicKeyBytes);
 
                 // Step 13. B->A : Nonce Get : Node B requests a Nonce from Node A that will allow Node B to send
                 // messages securely using the Temporary Symmetric Key.

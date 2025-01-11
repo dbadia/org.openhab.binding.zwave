@@ -54,11 +54,24 @@
       <artifactId>org.openhab.core.bom.openhab-core</artifactId>
       <type>pom</type>
       <scope>provided</scope>
+      <exclusions>
+        <!-- TODO: remove this as it's a temp hack to work on 4.1.x'     -->
+      	<exclusion>
+            <groupId>org.openhab.core.bundles</groupId>
+            <artifactId>org.openhab.core.io.jetty.certificate</artifactId>
+      	</exclusion>
+      </exclusions>
     </dependency>
     <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>30.1-jre</version>
+    </dependency>
+        <!-- TODO: remove this as it's a temp hack to work on 4.1.x'     -->
+    <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId> 
+        <version>1.76</version>
     </dependency>
 
     <dependency>

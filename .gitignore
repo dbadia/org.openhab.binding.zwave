@@ -6,3 +6,5 @@
 target
 OSGI-INF/*.xml
 .java-version
+gitbash.bat
+ijcert.sh

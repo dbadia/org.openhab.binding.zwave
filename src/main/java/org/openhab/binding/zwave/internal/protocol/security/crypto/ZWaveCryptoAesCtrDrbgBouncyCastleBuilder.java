@@ -21,9 +21,8 @@ import org.slf4j.LoggerFactory;
 public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesCtrDrbg {
     private static final Logger logger = LoggerFactory.getLogger(ZWaveCryptoAesCtrDrbgBouncyCastleBuilder.class);
 
-    @Override
     public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entropyInputBytes,
-            boolean makePredictionResistant) throws ZWaveCryptoException {
+            byte[] personalizationString, boolean makePredictionResistant) throws ZWaveCryptoException {
         final int keySizeInBits = 128;
         try {
             EntropySourceProvider entropySourceProvider = new MyEntropySourceProvider(entropyInputBytes,
@@ -31,7 +30,7 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
             // SP800 is the NIST spec that CTR DRBG is based on
             SP800SecureRandomBuilder builder = new SP800SecureRandomBuilder(entropySourceProvider);
             SP800SecureRandom secureRandom = builder.setSecurityStrength(keySizeInBits)
-                    .setPersonalizationString(PRNG_PERSONALIZATION_STRING)
+                    .setPersonalizationString(personalizationString)
                     .buildCTR(AESEngine.newInstance(), keySizeInBits, NONCE_NONE, makePredictionResistant);
             return secureRandom;
         } catch (RuntimeException e) {
@@ -47,7 +46,7 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
             // SP800 is the NIST spec that CTR DRBG is based on
             SP800SecureRandomBuilder builder = new SP800SecureRandomBuilder(entropyRandom, makePredictionResistant);
             SP800SecureRandom secureRandom = builder.setSecurityStrength(keySizeInBits)
-                    .setPersonalizationString(PRNG_PERSONALIZATION_STRING)
+                    .setPersonalizationString(new byte[0])
                     .buildCTR(AESEngine.newInstance(), keySizeInBits, NONCE_NONE, makePredictionResistant);
             return secureRandom;
         } catch (RuntimeException e) {
@@ -77,7 +76,6 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
                 @Override
                 public byte[] getEntropy() {
                     byte[] rv = new byte[bitsRequired / 8];
-                    System.arraycopy(data, index, rv, 0, rv.length);
                     index += bitsRequired / 8;
                     return rv;
                 }
@@ -88,5 +86,22 @@ public class ZWaveCryptoAesCtrDrbgBouncyCastleBuilder implements ZWaveCryptoAesC
                 }
             };
         }
+    }
+
+    // TODO: delete
+    public static void main(String[] args) {
+        try {
+            new ZWaveCryptoAesCtrDrbgBouncyCastleBuilder()
+                    .buildAesCounterModeDeterministicRandomNumberGenerator(new byte[16], true);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entrophyBytes,
+            boolean makePredictionResistant) throws ZWaveCryptoException {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

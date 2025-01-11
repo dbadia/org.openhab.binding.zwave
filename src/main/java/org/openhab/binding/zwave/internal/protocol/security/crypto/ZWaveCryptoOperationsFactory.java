@@ -163,6 +163,7 @@ public class ZWaveCryptoOperationsFactory {
                 return null;
             }
             long startTime = System.currentTimeMillis();
+            // TODO: DB not sure about this while loop, see what's done elsewhere
             while (instance == null) { // per Java Concurrency in Practice by Brian Goetz
                 try {
                     initLock.wait(15000);
