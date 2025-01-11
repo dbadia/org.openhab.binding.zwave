@@ -5,8 +5,8 @@ import java.security.SecureRandom;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
 
 public interface ZWaveCryptoAesCtrDrbg {
+    static final byte[] PRNG_PERSONALIZATION_STRING = new byte[0];
     // per CC:009F.01.00.11.016
-    static final byte[] PRNG_PERSONALIZATION_STRING = new byte[32];
     static final byte[] NONCE_NONE = new byte[0];
     static final boolean USE_DERIVATION_FUNCTION = false;
     static final int OUTPUT_LENGTH = 16;

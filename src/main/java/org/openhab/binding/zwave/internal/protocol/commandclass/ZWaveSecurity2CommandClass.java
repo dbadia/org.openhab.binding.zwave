@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.openhab.binding.zwave.internal.protocol.SerialMessage;
 import org.openhab.binding.zwave.internal.protocol.ZWaveCommandClassPayload;
 import org.openhab.binding.zwave.internal.protocol.ZWaveController;
@@ -59,6 +60,7 @@ import org.openhab.binding.zwave.internal.protocol.transaction.ZWaveCommandClass
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.EvictingQueue;
 import com.thoughtworks.xstream.annotations.XStreamAlias;
 import com.thoughtworks.xstream.annotations.XStreamOmitField;
@@ -153,13 +155,15 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     /**
      * The temporary AES key used during inclusion. Must be set to null once permanent keys are in use
      */
+    @VisibleForTesting
     @XStreamOmitField
-    private SecretKey tempAesCcmKey;
+    SecretKey tempAesCcmKey;
     /**
      * The temporary Personalization String used during inclusion. Must be set to null once permanent keys are in use
      */
+    @VisibleForTesting
     @XStreamOmitField
-    private byte[] tempPersonalizationString;
+    byte[] tempPersonalizationString;
 
     @XStreamOmitField
     private ZWaveKexData kexReportDataFromNode;
@@ -697,15 +701,15 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
             System.arraycopy(messageLengthBuffer, 0, aad, 6, 2);
 
             // tempAesCcmKey will be null when permanent keys are in use
-            if (tempAesCcmKey == null) {
-                return getCryptoProvider().encryptWithAesCcm(dataToEncrypt.toByteArray(), tempAesCcmKey, iv, aad);
-            } else {
-                SecretKey strongestKeyGranted = securityNetworkKeys.getKey(keyTypeInUse);
-                byte[] cipherBytes = getCryptoProvider().encryptWithAesCcm(dataToEncrypt.toByteArray(),
-                        strongestKeyGranted, iv, aad);
-                outputData.write(cipherBytes);
-                return outputData.toByteArray();
+            // TODO: DB where to use tempPersonaliztion?
+            SecretKey encryptionKey = tempAesCcmKey;
+            if (encryptionKey == null) {
+                encryptionKey = securityNetworkKeys.getKey(keyTypeInUse);
             }
+            byte[] cipherBytes = getCryptoProvider().encryptWithAesCcm(dataToEncrypt.toByteArray(), encryptionKey, iv,
+                    aad);
+            outputData.write(cipherBytes);
+            return outputData.toByteArray();
         } catch (ZWaveCryptoException | IOException e) {
             logger.error("NODE {}: Error encapsulating security message with COMMAND_CLASS_SECURITY_2",
                     getNode().getNodeId(), e);
@@ -744,7 +748,7 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
     /* ********************************************************************************/
     /* ********************************************************************************/
     /* ********************************************************************************/
-    /* ********************** BEGIN INCLUSION ONLY LOGIC ******************************/
+    /* ************************** INCLUSION ONLY LOGIC ********************************/
     /* ********************************************************************************/
     /* ********************************************************************************/
     /* ********************************************************************************/
@@ -1330,12 +1334,19 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         this.performingSecureInclusion.set(isPairing);
     }
 
-    public void generateTemporaryEncryptionKeys(byte[] deviceEcdhPublicKeyBytes) throws ZWaveCryptoException {
+    public void computeTemporaryEncryptionKeys(byte[] deviceEcdhPublicKeyBytes) throws ZWaveCryptoException {
         ZWaveCryptoOperations cryptoOps = getCryptoProvider();
         this.deviceEcdhPublicKeyBytes = deviceEcdhPublicKeyBytes;
         byte[] ecdhSharedSecret = cryptoOps.executeDiffieHellmanKeyAgreement(ourTempEcdhKeyPair.getPrivate(),
                 deviceEcdhPublicKeyBytes);
+        byte[] prk = computePrk(ecdhSharedSecret, cryptoOps.extractX25519PublicKeyBytes(ourTempEcdhKeyPair),
+                deviceEcdhPublicKeyBytes);
+        deriveTempKeysFromPrk(prk);
+    }
 
+    @VisibleForTesting
+    byte[] computePrk(byte[] ecdhSharedSecret, byte[] ourPublicKeyBytes, byte[] devicePublicKeyBytes)
+            throws ZWaveCryptoException {
         // @formatter:off
         /*
          * 3.6.4.7.1 CKDF-TempExtract
@@ -1350,19 +1361,8 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
          *      o PRK = CMAC(ConstantPRK, ECDH Shared Secret | KeyPub_A | KeyPub_B )
          */
         // @formatter:on
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        byte[] dataToMac = null;
-        try {
-            baos.write(ecdhSharedSecret);
-            baos.write(cryptoOps.extractX25519PublicKeyBytes(ourTempEcdhKeyPair));
-            baos.write(deviceEcdhPublicKeyBytes);
-            dataToMac = baos.toByteArray();
-        } catch (IOException e) {
-            logger.error("NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_IO_FAIL {}", getNode().getNodeId(),
-                    e.getMessage(), e);
-            ZWaveSecurity2CommandClass.this.continueSecureInclusion.set(false);
-            throw new ZWaveCryptoException("ECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_IO_FAIL ", e);
-        }
+        byte[] dataToMac = ArrayUtils.addAll(ecdhSharedSecret, ourPublicKeyBytes);
+        dataToMac = ArrayUtils.addAll(dataToMac, devicePublicKeyBytes);
         if (dataToMac.length != 96) {
             logger.error(
                     "NODE {}: SECURITY_2_INC State=FAILED, Reason=ECDH_TEMP_GEN_SIZE_ERR expected 96 bytes, found {}",
@@ -1372,8 +1372,12 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         }
         SecretKey tempExtractKey = getCryptoProvider()
                 .buildAESKeyFromBytes(ZWaveCryptoOperations.CKDF_TEMP_EXTRACT_CONSTANT);
-        byte[] prkBytes = getCryptoProvider().performAesCmac(tempExtractKey, dataToMac);
+        byte[] prkBytes = ZWaveCryptoOperations.performAesCmac(tempExtractKey, dataToMac);
+        return prkBytes;
+    }
 
+    @VisibleForTesting
+    void deriveTempKeysFromPrk(byte[] prkBytes) throws ZWaveCryptoException {
         // @formatter:off
         /*
          * 3.6.4.7.2 CKDF-TempExpand
@@ -1401,22 +1405,19 @@ public class ZWaveSecurity2CommandClass extends ZWaveCommandClass implements ZWa
         Arrays.fill(constantTePlusCounter, (byte) (0x88 & 0xFF));
         // Compute T1
         constantTePlusCounter[15] = 0x01;
-        byte[] T1Bytes = getCryptoProvider().performAesCmac(prkKey, constantTePlusCounter);
-        this.tempAesCcmKey = getCryptoProvider().buildAESKeyFromBytes(T1Bytes);
+        byte[] t1Bytes = ZWaveCryptoOperations.performAesCmac(prkKey, constantTePlusCounter);
+        this.tempAesCcmKey = getCryptoProvider().buildAESKeyFromBytes(t1Bytes);
+
+        // TempPersonalizationString
         // Compute T2
         constantTePlusCounter[15] = 0x02;
-        byte[] T2Bytes = getCryptoProvider().performAesCmac(prkKey, constantTePlusCounter);
+        byte[] toMac = ArrayUtils.addAll(t1Bytes, constantTePlusCounter);
+        byte[] t2Bytes = ZWaveCryptoOperations.performAesCmac(prkKey, toMac);
         // Compute T3
         constantTePlusCounter[15] = 0x03;
-        byte[] T3Bytes = getCryptoProvider().performAesCmac(prkKey, constantTePlusCounter);
-        byte[] stringBytes = new byte[T2Bytes.length + T3Bytes.length];
-        for (int i = 0; i < T2Bytes.length; i++) {
-            stringBytes[i] = T2Bytes[i];
-        }
-        int T2Length = T2Bytes.length;
-        for (int i = 0; i < T3Bytes.length; i++) {
-            stringBytes[i + T2Length] = (byte) (T3Bytes[i] & 0xFF);
-        }
-        this.tempPersonalizationString = stringBytes;
+        toMac = ArrayUtils.addAll(t2Bytes, constantTePlusCounter);
+        byte[] t3Bytes = ZWaveCryptoOperations.performAesCmac(prkKey, toMac);
+        // Concatenate them
+        this.tempPersonalizationString = ArrayUtils.addAll(t2Bytes, t3Bytes);
     }
 }

@@ -16,7 +16,7 @@ public class CmacTest {
 
     @Test
     public void test() throws Exception {
-        CryptoInitTestHelper.initCryptoForTesting();
+        CryptoInitTestHelper.initCryptoForTesting(null, null);
         // Test vector taken from
         // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_CMAC.pdf
         byte[] keybytes = HEX.parseHex("2B7E151628AED2A6ABF7158809CF4F3C");
