@@ -5,6 +5,7 @@ import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.openhab.binding.zwave.internal.protocol.security.ZWaveSecurityNetworkKeys;
+import org.openhab.binding.zwave.internal.protocol.security.crypto.drbg.ZWaveCryptoAesCtrDrbgOurImpl;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesAeadCcm;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoDiffieHellman;
@@ -41,7 +42,7 @@ public class ZWaveCryptoOperationsFactory {
                 InitStopWatch stopWatch = new InitStopWatch();
                 try {
                     final ZWaveCryptoAesAeadCcm aeadCcmProvider = new ZWaveCryptoAesAeadCcmBouncyCastle();
-                    final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgBouncyCastleBuilder();
+                    final ZWaveCryptoAesCtrDrbg ctrDrbgProvider = new ZWaveCryptoAesCtrDrbgOurImpl();
                     final ZWaveCryptoDiffieHellman diffieHellmanProvider = new ZWaveCryptoDiffieHellmanJdk();
                     stopWatch.reset();
                     SecureRandom entropyRandom = waitForHardwareBaseEntropy();

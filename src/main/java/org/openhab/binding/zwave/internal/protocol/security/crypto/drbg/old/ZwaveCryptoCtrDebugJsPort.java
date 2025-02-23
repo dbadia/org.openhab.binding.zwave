@@ -1,4 +1,4 @@
-package org.openhab.binding.zwave.internal.protocol.security.crypto;
+package org.openhab.binding.zwave.internal.protocol.security.crypto.drbg.old;
 
 import java.util.Arrays;
 
@@ -8,7 +8,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * a port of ctr-drbg.js
  */
-public class ZwaveCryptoCtrDebug {
+public class ZwaveCryptoCtrDebugJsPort {
     private static final int MAX_GENERATE_LENGTH = 65536;
     private final byte[] ctr;
     private final int keySize;
@@ -19,7 +19,7 @@ public class ZwaveCryptoCtrDebug {
     private final boolean derivation;
     private boolean initialized;
 
-    public ZwaveCryptoCtrDebug(int bits, boolean derivation, byte[] entropy, byte[] nonce, byte[] pers) {
+    public ZwaveCryptoCtrDebugJsPort(int bits, boolean derivation, byte[] entropy, byte[] nonce, byte[] pers) {
         this.ctr = new byte[16];
         this.keySize = bits / 8;
         int entSize = this.keySize + this.blkSize;
@@ -34,7 +34,8 @@ public class ZwaveCryptoCtrDebug {
         }
     }
 
-    public void init(byte[] entropy, byte[] nonce, byte[] pers) {
+    private void init(byte[] entropy, byte[] nonceParam, byte[] pers) {
+        byte[] nonce = nonNull(nonceParam);
         byte[] seed;
         if (derivation) {
             seed = derive(entropy, nonce, pers);
@@ -52,11 +53,19 @@ public class ZwaveCryptoCtrDebug {
         initialized = true;
     }
 
-    public void reseed(byte[] entropy, byte[] additional) {
+    private static byte[] nonNull(byte[] arrayParam) {
+        byte[] array = arrayParam;
+        if (array == null) {
+            array = new byte[0];
+        }
+        return array;
+    }
+
+    public void reseed(byte[] entropy, byte[] additionalParam) {
         if (!initialized) {
             throw new IllegalStateException("DRBG not initialized.");
         }
-
+        byte[] additional = nonNull(additionalParam);
         byte[] seed;
         if (derivation) {
             seed = derive(entropy, additional);
@@ -106,7 +115,8 @@ public class ZwaveCryptoCtrDebug {
         }
     }
 
-    private void update(byte[] seed) {
+    private void update(byte[] seedParam) {
+        byte[] seed = nonNull(seedParam);
         byte[] newSlab = new byte[slab.length];
         for (int i = 0; i < newSlab.length; i += blkSize) {
             System.arraycopy(next(), 0, newSlab, i, blkSize);

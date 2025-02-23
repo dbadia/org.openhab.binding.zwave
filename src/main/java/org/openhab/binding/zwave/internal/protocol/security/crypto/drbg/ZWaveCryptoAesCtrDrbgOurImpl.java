@@ -1,7 +1,8 @@
-package org.openhab.binding.zwave.internal.protocol.security.crypto;
+package org.openhab.binding.zwave.internal.protocol.security.crypto.drbg;
 
 import java.security.SecureRandom;
 
+import org.openhab.binding.zwave.internal.protocol.security.crypto.ZWaveCryptoException;
 import org.openhab.binding.zwave.internal.protocol.security.crypto.interfaces.ZWaveCryptoAesCtrDrbg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,8 @@ public class ZWaveCryptoAesCtrDrbgOurImpl implements ZWaveCryptoAesCtrDrbg {
     @Override
     public SecureRandom buildAesCounterModeDeterministicRandomNumberGenerator(byte[] entrophyBytes,
             boolean makePredictionResistant) throws ZWaveCryptoException {
-        // TODO Auto-generated method stub
+
+        // new ZwaveCryptoCtrDebugJsPort(128, makePredictionResistant, entrophyBytes, entrophyBytes, entrophyBytes;
         return null;
     }
 
